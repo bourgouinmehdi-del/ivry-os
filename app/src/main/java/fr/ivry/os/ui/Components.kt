@@ -151,7 +151,7 @@ fun ActionButton(
 fun Freshness(live: Live<*>, now: Long, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val (text, warn) = when {
-        live.value == null && live.error != null -> "Indisponible · ${live.error}" to true
+        live.value == null && live.error != null -> "Indisponible pour le moment" to true
         live.value == null -> "Chargement…" to false
         live.isStale(now) -> "PÉRIMÉ · donnée de ${hhmm(live.fetchedAt)}" to true
         live.error != null -> "Échec actualisation · valeur de ${hhmm(live.fetchedAt)}" to true

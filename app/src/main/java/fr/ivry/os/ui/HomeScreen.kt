@@ -186,7 +186,14 @@ private fun TransitPanel(
             val t = live.value
             val deps = t?.departures?.filter { it.expectedAt > now - 60_000 }?.take(3)
             when {
-                t == null -> Text(live.error ?: "Chargement…", fontSize = 12.sp, color = p.textDim)
+                t == null -> Text(
+                    when {
+                        live.error?.contains("Proxy") == true -> "Ajoute le proxy PRIM dans Paramètres › Sources pour voir les passages."
+                        live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
+                        else -> live.error ?: "Chargement…"
+                    },
+                    fontSize = 11.sp, lineHeight = 14.sp, color = p.textDim,
+                )
                 deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 12.sp, color = p.textDim)
                 else -> deps.forEach { d ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
