@@ -96,8 +96,8 @@ object Sources {
 
     /**
      * Accepte l'identifiant tel qu'il est copié depuis les données IDFM et le convertit au format SIRI :
-     * « IDFM:monomodalStopPlace:43135 » ou « 43135 » → STIF:StopArea:SP:43135:
-     * « IDFM:463158 » (quai)                        → STIF:StopPoint:Q:463158:
+     * « IDFM:monomodalStopPlace:43135 », « IDFM:22396 » ou « 22396 » → STIF:StopArea:SP:<id>:
+     * « IDFM:463158 » (quai, 6 chiffres)                         → STIF:StopPoint:Q:463158:
      * Un identifiant déjà au format STIF est gardé tel quel.
      */
     fun normalizeStop(raw: String): String {
@@ -105,7 +105,8 @@ object Sources {
         if (r.startsWith("STIF:")) return if (r.endsWith(":")) r else "$r:"
         val digits = r.substringAfterLast(':').filter { it.isDigit() }
         if (digits.isEmpty()) return r
-        return if (r.contains("monomodalStopPlace", true) || r.contains("StopArea", true) || !r.contains(':'))
+        // IDFM : zones d'arrêt (gares, stations) sur 5 chiffres au plus, quais sur 6 chiffres (4xxxxx)
+        return if (r.contains("monomodalStopPlace", true) || r.contains("StopArea", true) || digits.length <= 5)
             "STIF:StopArea:SP:$digits:" else "STIF:StopPoint:Q:$digits:"
     }
 
