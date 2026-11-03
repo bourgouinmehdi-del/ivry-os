@@ -21,6 +21,9 @@ data class CurrentWeather(
     val gusts: Double,
     val min: Double,
     val max: Double,
+    val cloudCover: Int? = null,
+    val sunrise: Long? = null,
+    val sunset: Long? = null,
 )
 
 data class HourPoint(val hour: Int, val temp: Double, val rainProb: Int, val code: Int)

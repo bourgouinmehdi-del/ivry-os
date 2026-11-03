@@ -18,8 +18,8 @@ object Sources {
         "https://api.open-meteo.com/v1/forecast?latitude=$LAT&longitude=$LON&timezone=Europe%2FParis&wind_speed_unit=kmh"
 
     const val CURRENT_URL =
-        "$OM&current=temperature_2m,apparent_temperature,weather_code,precipitation,wind_speed_10m,wind_gusts_10m" +
-            "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1"
+        "$OM&current=temperature_2m,apparent_temperature,weather_code,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover" +
+            "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&forecast_days=1"
 
     const val FORECAST_URL =
         "$OM&hourly=temperature_2m,precipitation_probability,weather_code" +
@@ -45,8 +45,14 @@ object Sources {
             gusts = c.optDouble("wind_gusts_10m", 0.0),
             min = d.getJSONArray("temperature_2m_min").getDouble(0),
             max = d.getJSONArray("temperature_2m_max").getDouble(0),
+            cloudCover = if (c.has("cloud_cover")) c.optInt("cloud_cover") else null,
+            sunrise = d.optJSONArray("sunrise")?.optString(0)?.let(::localToEpoch),
+            sunset = d.optJSONArray("sunset")?.optString(0)?.let(::localToEpoch),
         )
     }
+
+    private fun localToEpoch(s: String): Long? =
+        runCatching { LocalDateTime.parse(s).atZone(PARIS).toInstant().toEpochMilli() }.getOrNull()
 
     fun parseForecast(txt: String): Forecast {
         val o = JSONObject(txt)

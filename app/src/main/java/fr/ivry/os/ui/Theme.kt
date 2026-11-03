@@ -40,7 +40,7 @@ data class Palette(
 fun paletteFor(t: ThemeName, darkBoost: Boolean, glassLevel: Int): Palette {
     val a = glassLevel.coerceIn(2, 9) / 10f
     val p = when (t) {
-        ThemeName.MANUFACTURE -> Palette(t, bg = Ivry.Asphalte, glass = Color(0xFF26292B).copy(alpha = a),
+        ThemeName.MANUFACTURE -> Palette(t, bg = Ivry.Asphalte, glass = Color(0xFF16202A).copy(alpha = a),
             accent = Ivry.Brique, accent2 = Ivry.Bleu, textDim = Ivry.Beton.copy(alpha = .62f))
         ThemeName.RENAUDIE -> Palette(t, bg = Color(0xFF1C1D1A), glass = Color(0xFF2E2F2A).copy(alpha = a),
             accent = Ivry.Sable, accent2 = Ivry.Beton, textDim = Ivry.Sable.copy(alpha = .7f))

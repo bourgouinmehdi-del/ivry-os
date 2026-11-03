@@ -2,6 +2,9 @@ package fr.ivry.os.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.border
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +71,8 @@ fun IvryRoot(vm: MainViewModel) {
         return
     }
     val idle by vm.engine.idle.collectAsStateWithLifecycle()
+    val weather by vm.engine.weatherNow.collectAsStateWithLifecycle()
+    val sky = rememberSky(weather.value)
     val base = remember(prefs.theme, prefs.darkBoost, prefs.glass) { paletteFor(prefs.theme, prefs.darkBoost, prefs.glass) }
     val palette = if (idle && prefs.antiBurnIn) base.dimmed() else base
     val perf = prefs.performance || idle
@@ -98,7 +104,7 @@ fun IvryRoot(vm: MainViewModel) {
             LocalTextStyle provides TextStyle(fontFamily = Bricolage),
         ) {
             Box(Modifier.fillMaxSize().background(palette.bg)) {
-                Backdrop(palette)
+                CityScene(sky, Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().offset { shift }) {
                     if (!booted) Splash(skip = prefs.performance) { booted = true }
                     else MainShell(vm, prefs)
@@ -137,11 +143,10 @@ private fun MainShell(vm: MainViewModel, prefs: Prefs) {
         }
     }
 
-    Row(Modifier.fillMaxSize()) {
-        Sidebar(section) { s ->
-            if (s == Section.LIVE) vm.launchLive() else { detail = null; section = s }
-        }
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+    Box(Modifier.fillMaxSize()) {
+        // Hors de l'accueil, la ville passe en arrière-plan atténué
+        if (detail != null || section != Section.HOME) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .58f)))
+        Box(Modifier.fillMaxSize().padding(start = 76.dp)) {
             val d = detail
             when {
                 d != null -> DetailScreen(vm, d) { detail = null }
@@ -152,51 +157,64 @@ private fun MainShell(vm: MainViewModel, prefs: Prefs) {
                 else -> AppsScreen(vm, prefs, apps, section)
             }
         }
+        Rail(section, Modifier.align(Alignment.TopStart)) { s ->
+            if (s == Section.LIVE) vm.launchLive() else { detail = null; section = s }
+        }
     }
 }
 
+/** Menu en colonne fine d'icônes, qui s'ouvre avec les libellés dès qu'on y navigue. */
 @Composable
-private fun Sidebar(current: Section, onSelect: (Section) -> Unit) {
+private fun Rail(current: Section, modifier: Modifier, onSelect: (Section) -> Unit) {
     val p = LocalPalette.current
-    val stripes = listOf(p.accent, p.accent2, Ivry.Orange, p.nature, p.focus, p.textDim)
+    val perf = LocalPerf.current
+    var expanded by remember { mutableStateOf(false) }
+    val width by animateDpAsState(if (expanded) 184.dp else 52.dp, if (perf) snap() else tween(160), label = "rail")
     Column(
-        Modifier.width(136.dp).fillMaxHeight().background(Color.Black.copy(alpha = .28f))
-            .padding(start = 14.dp, end = 10.dp, top = 22.dp, bottom = 16.dp),
+        modifier.fillMaxHeight().padding(start = 12.dp, top = 14.dp, bottom = 14.dp).width(width)
+            .background(Color(0xFF111820).copy(alpha = if (expanded) .94f else .62f))
+            .border(1.dp, Ivry.Ivoire.copy(alpha = .10f))
+            .onFocusChanged { expanded = it.hasFocus }
+            .padding(horizontal = 6.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Logo(20.sp)
-        Text("Ivry-sur-Seine", fontSize = 9.sp, color = p.textDim, letterSpacing = 1.sp)
-        Spacer(Modifier.height(16.dp))
-        Section.entries.forEachIndexed { i, s -> NavItem(s, s == current, stripes[i % stripes.size]) { onSelect(s) } }
-        Spacer(Modifier.weight(1f))
-        Text("v1.0", fontSize = 9.sp, color = p.textDim)
+        Box(Modifier.fillMaxWidth().height(30.dp), contentAlignment = Alignment.CenterStart) {
+            if (expanded) Logo(17.sp, Modifier.padding(start = 6.dp))
+            else Text("IV", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = p.text,
+                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(14.dp))
+        Section.entries.forEach { s -> RailItem(s, s == current, expanded) { onSelect(s) } }
     }
 }
 
 @Composable
-private fun NavItem(s: Section, active: Boolean, stripe: Color, onClick: () -> Unit) {
+private fun RailItem(s: Section, active: Boolean, expanded: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
     var focused by remember { mutableStateOf(false) }
     val bg = when {
         focused -> p.focus
-        active -> p.text.copy(alpha = .10f)
+        active -> p.text.copy(alpha = .14f)
         else -> Color.Transparent
     }
     val fg = if (focused) Ivry.Asphalte else p.text
     Row(
-        Modifier.fillMaxWidth().height(36.dp)
+        Modifier.fillMaxWidth().height(38.dp)
             .background(bg, CutCornerShape(topEnd = 10.dp))
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(4.dp).fillMaxHeight().background(if (active) p.focus else stripe))
-        Spacer(Modifier.width(8.dp))
-        if (s.icon != null) Icon(s.icon, null, tint = fg, modifier = Modifier.size(16.dp))
-        else Box(Modifier.padding(horizontal = 3.dp).size(9.dp).background(Ivry.Orange, CircleShape))
-        Spacer(Modifier.width(8.dp))
-        Text(s.label, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = fg,
+        Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+            if (s.icon != null) Icon(s.icon, s.label, tint = fg, modifier = Modifier.size(18.dp))
+            else Box(Modifier.size(10.dp).background(Ivry.Orange, CircleShape))
+        }
+        if (expanded) Text(s.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = fg,
             fontFamily = Condensed, maxLines = 1)
+        if (active && !focused) {
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.padding(end = 6.dp).size(width = 3.dp, height = 18.dp).background(p.focus))
+        }
     }
 }
 
@@ -227,99 +245,4 @@ private fun Splash(skip: Boolean, onDone: () -> Unit) {
             ))
         }
     }
-}
-
-/** Fonds dessinés (aucune fausse photographie) : un motif propre à chaque thème. */
-@Composable
-private fun Backdrop(p: Palette) {
-    Spacer(Modifier.fillMaxSize().drawWithCache {
-        val w = size.width
-        val h = size.height
-        onDrawBehind {
-            when (p.theme) {
-                ThemeName.MANUFACTURE -> {
-                    val rows = 34
-                    val bh = h / rows
-                    val bw = bh * 3
-                    for (row in rows / 2 until rows) {
-                        val fade = (row - rows / 2f) / (rows / 2f)
-                        val y = row * bh
-                        var x = if (row % 2 == 0) 0f else -bw / 2
-                        var k = 0
-                        while (x < w * .55f) {
-                            val a = (if ((row + k) % 7 == 0) .08f else .04f) * fade
-                            drawRect(p.accent.copy(alpha = a), Offset(x + 1, y + 1), Size(bw - 2, bh - 2))
-                            x += bw; k++
-                        }
-                    }
-                    // Verrière de la Manufacture
-                    val gx = w * .64f
-                    for (i in 0..8) {
-                        val sx = gx + i * w * .045f
-                        drawLine(p.accent2.copy(alpha = .10f), Offset(sx, 0f), Offset(sx - h * .14f, h * .34f), 2f)
-                    }
-                    drawLine(p.accent2.copy(alpha = .10f), Offset(gx - h * .14f, h * .34f), Offset(w, h * .34f), 2f)
-                }
-                ThemeName.RENAUDIE -> {
-                    fun tri(a: Offset, b: Offset, c: Offset, col: Color) {
-                        drawPath(Path().apply { moveTo(a.x, a.y); lineTo(b.x, b.y); lineTo(c.x, c.y); close() }, col)
-                    }
-                    tri(Offset(w * .55f, h), Offset(w * .82f, h * .38f), Offset(w, h), Ivry.Beton.copy(alpha = .05f))
-                    tri(Offset(w * .70f, h), Offset(w * .90f, h * .58f), Offset(w * 1.05f, h), Ivry.Sable.copy(alpha = .06f))
-                    tri(Offset(w * .78f, 0f), Offset(w, 0f), Offset(w, h * .30f), Ivry.Beton.copy(alpha = .04f))
-                    tri(Offset(0f, h * .70f), Offset(w * .18f, h), Offset(0f, h), Ivry.Sable.copy(alpha = .05f))
-                }
-                ThemeName.GAILHOUSTET -> {
-                    // Terrasses en gradins, jardinières
-                    for (k in 0 until 6) {
-                        val x0 = w * (.62f + k * .065f)
-                        val y0 = h * (.92f - k * .11f)
-                        drawRect(Ivry.Beton.copy(alpha = .045f), Offset(x0, y0), Size(w - x0, h - y0))
-                        drawLine(Ivry.Beton.copy(alpha = .10f), Offset(x0, y0), Offset(w, y0), 2f)
-                        var gx = x0 + 10f
-                        while (gx < w) { drawCircle(Ivry.Vert.copy(alpha = .16f), h * .012f, Offset(gx, y0 - h * .01f)); gx += h * .035f }
-                    }
-                }
-                ThemeName.POPULAIRE -> {
-                    rotate(-8f, Offset(w * .82f, h * .2f)) {
-                        drawRect(Ivry.Orange.copy(alpha = .07f), Offset(w * .70f, -h * .1f), Size(w * .26f, h * .45f))
-                    }
-                    rotate(5f, Offset(w * .9f, h * .8f)) {
-                        drawRect(Ivry.Jaune.copy(alpha = .06f), Offset(w * .74f, h * .55f), Size(w * .3f, h * .5f))
-                    }
-                    val step = h / 40
-                    var y = h * .62f
-                    while (y < h) {
-                        var x = w * .02f
-                        while (x < w * .22f) {
-                            drawCircle(Ivry.Ivoire.copy(alpha = .05f), radius = step * .22f * ((y - h * .6f) / (h * .4f)), center = Offset(x, y))
-                            x += step
-                        }
-                        y += step
-                    }
-                }
-                ThemeName.CONFLUENCES -> {
-                    val seine = Path().apply {
-                        moveTo(w * .35f, h); cubicTo(w * .55f, h * .7f, w * .75f, h * .75f, w, h * .45f)
-                        lineTo(w, h * .62f); cubicTo(w * .8f, h * .85f, w * .6f, h * .85f, w * .48f, h); close()
-                    }
-                    drawPath(seine, Brush.horizontalGradient(listOf(Ivry.Bleu.copy(alpha = .05f), Ivry.Bleu.copy(alpha = .16f))))
-                    val marne = Path().apply {
-                        moveTo(w, h * .2f); cubicTo(w * .9f, h * .35f, w * .85f, h * .45f, w * .8f, h * .62f)
-                        lineTo(w * .86f, h * .64f); cubicTo(w * .9f, h * .48f, w * .95f, h * .38f, w, h * .3f); close()
-                    }
-                    drawPath(marne, Ivry.Vert.copy(alpha = .14f))
-                }
-            }
-            drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .35f))))
-            // Appareillage de brique discret en pied d'écran
-            val bh = h / 90f
-            val bw = bh * 3.2f
-            for (r in 0 until 2) {
-                var x = if (r % 2 == 0) 0f else -bw / 2
-                val y = h - (r + 1) * bh
-                while (x < w) { drawRect(Ivry.Brique.copy(alpha = .22f), Offset(x + 1, y + 1), Size(bw - 2, bh - 2)); x += bw }
-            }
-        }
-    })
 }

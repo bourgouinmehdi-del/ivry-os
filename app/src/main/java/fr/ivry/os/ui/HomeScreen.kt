@@ -58,12 +58,14 @@ fun HomeScreen(
     LaunchedEffect(Unit) { delay(60); runCatching { firstFocus.requestFocus() } }
 
     Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 24.dp, top = 14.dp, bottom = 12.dp)) {
-        // ZONE 1 — identité, heure, ligne d'horizon
-        IvryHero(weather.value, online, { onSection(Section.SETTINGS) }, Modifier.fillMaxWidth().height(86.dp))
-        ShedFrieze(Modifier.padding(top = 6.dp, bottom = 8.dp))
+        // ZONE 1 — identité et heure, posées dans le ciel
+        IvryHeader(weather.value, online, { onSection(Section.SETTINGS) })
 
-        // ZONE 2 — IVRY LIVE
-        Row(Modifier.fillMaxWidth().weight(.47f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // La ville reste visible entre l'en-tête et les modules
+        Spacer(Modifier.weight(.25f))
+
+        // ZONE 2 — IVRY LIVE, plaques de verre posées sur la Seine
+        Row(Modifier.fillMaxWidth().weight(.40f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WeatherPanel(weather, forecast, Modifier.weight(1.3f)) { onDetail(Detail.WEATHER) }
             TransitPanel("7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve – 8 Mai 1945",
                 metro, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
@@ -74,7 +76,7 @@ fun HomeScreen(
         Spacer(Modifier.height(10.dp))
 
         // ZONE 3 — applications prioritaires
-        Row(Modifier.fillMaxWidth().weight(.29f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().weight(.18f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BigAppCard("myCANAL", "CANAL+", canal, AppsRepository.CANAL_STORE, Color(0xFF0B0B0B),
                 CutCornerShape(topStart = 26.dp), Modifier.weight(1f), firstFocus, vm)
             BigAppCard("YouTube", "Vidéo", youtube, AppsRepository.YOUTUBE_TV, Color(0xFF1E1E1E),
@@ -86,7 +88,7 @@ fun HomeScreen(
         // « Le reste »
         PanelLabel("Le reste", p.nature)
         Spacer(Modifier.height(5.dp))
-        Box(Modifier.fillMaxWidth().weight(.24f)) {
+        Box(Modifier.fillMaxWidth().weight(.16f)) {
             if (others.isEmpty()) {
                 Text("Aucune autre application détectée.", fontSize = 12.sp, color = p.textDim)
             } else {

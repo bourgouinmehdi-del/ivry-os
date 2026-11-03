@@ -9,9 +9,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -30,191 +30,274 @@ import fr.ivry.os.data.wmoLabel
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
-private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH)
+// ======================= État du ciel =======================
 
-/** Bandeau d'en-tête : ville, heure, et ligne d'horizon d'Ivry qui suit l'heure et la météo réelles. */
+/** Tout ce dont la scène a besoin, en minutes locales (Paris). */
+data class SkyState(
+    val minute: Int,
+    val sunrise: Int,
+    val sunset: Int,
+    val cloud: Int,
+    val code: Int,
+    val precip: Double,
+    val moon: Float,
+) {
+    /** 1 en plein jour, 0 en pleine nuit, transition de 90 min autour du lever et du coucher. */
+    val daylight: Float
+        get() = when {
+            minute < sunrise - 45 || minute > sunset + 45 -> 0f
+            minute < sunrise + 45 -> (minute - (sunrise - 45)) / 90f
+            minute > sunset - 45 -> 1f - (minute - (sunset - 45)) / 90f
+            else -> 1f
+        }.coerceIn(0f, 1f)
+    val night: Float get() = 1f - daylight
+    val rain: Boolean get() = code in 51..67 || code in 80..82 || code >= 95
+    val snow: Boolean get() = code in 71..77 || code in 85..86
+    val fog: Boolean get() = code == 45 || code == 48
+    val storm: Boolean get() = code >= 95
+}
+
+/** Recalculé toutes les 5 minutes ou à chaque nouvelle donnée météo. */
 @Composable
-fun IvryHero(weather: CurrentWeather?, online: Boolean, onSettings: () -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    val hour = Instant.ofEpochMilli(rememberTick(60_000)).atZone(PARIS).hour
-    Box(modifier.clip(CutCornerShape(bottomEnd = 34.dp))) {
-        Skyline(hour, weather?.code ?: -1, Modifier.fillMaxSize())
-        Row(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 10.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("Ivry-sur-Seine", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Ivry.Ivoire,
-                    letterSpacing = (-0.5).sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val line = greeting(hour) + (weather?.let { " · ${wmoLabel(it.code)}, ${deg(it.temp)}" } ?: "")
-                    Text(line, fontSize = 12.sp, color = Ivry.Ivoire.copy(alpha = .82f))
-                    Spacer(Modifier.width(10.dp))
-                    Tag(if (online) "EN LIGNE" else "HORS LIGNE", if (online) p.nature else p.warn)
-                }
-            }
-            Clock()
-            Spacer(Modifier.width(12.dp))
-            Plate(Modifier.size(38.dp), shape = CutCornerShape(topEnd = 12.dp), onClick = onSettings) { f ->
-                Icon(Icons.Default.Settings, "Paramètres", tint = if (f) p.focus else Ivry.Ivoire,
-                    modifier = Modifier.align(Alignment.Center).size(19.dp))
-            }
-        }
+fun rememberSky(weather: CurrentWeather?): SkyState {
+    val now = rememberTick(300_000)
+    return remember(now, weather) {
+        fun mins(ms: Long): Int = Instant.ofEpochMilli(ms).atZone(PARIS).let { it.hour * 60 + it.minute }
+        val code = weather?.code ?: -1
+        SkyState(
+            minute = mins(now),
+            sunrise = weather?.sunrise?.let(::mins) ?: (7 * 60 + 30),
+            sunset = weather?.sunset?.let(::mins) ?: (18 * 60),
+            cloud = weather?.cloudCover ?: when (code) { 0 -> 5; 1 -> 25; 2 -> 55; -1 -> 30; else -> 90 },
+            code = code,
+            precip = weather?.precip ?: 0.0,
+            moon = moonPhase(now),
+        )
     }
 }
 
-@Composable
-private fun Clock() {
-    val z = Instant.ofEpochMilli(rememberTick(1_000)).atZone(PARIS)
-    Column(horizontalAlignment = Alignment.End) {
-        Text(TIME.format(z), fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold, color = Ivry.Ivoire)
-        Text(DATE.format(z).replaceFirstChar { it.uppercase() }, fontSize = 11.sp, color = Ivry.Ivoire.copy(alpha = .8f))
-    }
+/** 0 = nouvelle lune, 0,5 = pleine lune. Référence : nouvelle lune du 6 janvier 2000, 18 h 14 UTC. */
+private fun moonPhase(ms: Long): Float {
+    val days = (ms - 947_182_440_000L) / 86_400_000.0
+    val f = (days / 29.530588853) % 1.0
+    return (if (f < 0) f + 1 else f).toFloat()
 }
 
-private fun greeting(h: Int) = when (h) {
-    in 5..11 -> "Bonjour"
-    in 12..17 -> "Bon après-midi"
-    in 18..22 -> "Bonsoir"
-    else -> "Bonne nuit"
+private typealias Grad = Pair<Color, Color>
+private val NIGHT: Grad = Color(0xFF070C12) to Color(0xFF15202D)
+private val DAWN: Grad = Color(0xFF1E2236) to Color(0xFFB8664C)
+private val DAY: Grad = Color(0xFF2C5068) to Color(0xFF7FA2B2)
+private val DUSK: Grad = Color(0xFF241E33) to Color(0xFFC86E48)
+private fun mix(a: Grad, b: Grad, t: Float): Grad = lerp(a.first, b.first, t) to lerp(a.second, b.second, t)
+
+private fun SkyState.gradient(): Grad {
+    val m = minute; val r = sunrise; val s = sunset
+    val base = when {
+        m < r - 60 || m > s + 60 -> NIGHT
+        m < r -> mix(NIGHT, DAWN, (m - (r - 60)) / 60f)
+        m < r + 60 -> mix(DAWN, DAY, (m - r) / 60f)
+        m < s - 60 -> DAY
+        m < s -> mix(DAY, DUSK, (m - (s - 60)) / 60f)
+        else -> mix(DUSK, NIGHT, (m - s) / 60f)
+    }
+    val grey = lerp(Color(0xFF161B20), Color(0xFF4A5157), daylight)
+    val k = cloud / 100f
+    return lerp(base.first, grey, k * .45f) to lerp(base.second, grey, k * .7f)
 }
+
+// ======================= Scène =======================
 
 /**
- * Silhouette dessinée, sans photo : Manufacture des Œillets (toits en sheds), étoiles de Renaudie,
- * terrasses de Renée Gailhoustet, grands ensembles, grues d'Ivry Confluences, la Seine au premier plan.
+ * Ivry dessinée, sans photo : Manufacture des Œillets (sheds), étoiles de Renaudie, terrasses de
+ * Renée Gailhoustet, grands ensembles, grues d'Ivry Confluences, quais et Seine. Le tout réagit
+ * à l'heure réelle, au lever/coucher du soleil, aux nuages, à la pluie, à la neige, au brouillard et à la lune.
  */
 @Composable
-private fun Skyline(hour: Int, code: Int, modifier: Modifier) {
+fun CityScene(sky: SkyState, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     Spacer(modifier.drawWithCache {
         val w = size.width
         val h = size.height
-        val night = hour < 6 || hour >= 20
-        val dusk = hour in 17..19
-        val dawn = hour in 6..8
-        val cloudy = code in listOf(2, 3, 45, 48) || code >= 51
-        val snow = code in 71..77 || code in 85..86
-        val rain = code >= 51 && !snow
+        val (top, low) = sky.gradient()
+        val night = sky.night
+        val day = sky.daylight
+        val base = h * .52f
+        val u = h * .36f
+        val ground = Color(0xFF0D0F10)
+        val far = lerp(ground, low, .30f + .15f * day)
+        val concrete = lerp(ground, Ivry.Beton, .12f + .14f * day)
+        val brick = lerp(ground, Ivry.Brique, .35f + .30f * day)
+        val green = lerp(ground, p.nature, .65f + .35f * day)
+        val river = lerp(ground, low, .28f)
+        val clouds = sky.cloud / 100f
 
-        val top = when { night -> Color(0xFF0B1116); dusk -> Color(0xFF2A2233); dawn -> Color(0xFF26283A); else -> Color(0xFF2B4250) }
-        var low = when { night -> Color(0xFF1B2530); dusk -> Color(0xFF8A4A3A); dawn -> Color(0xFF7A5A55); else -> Color(0xFF5F7F8C) }
-        if (cloudy) low = lerp(low, Color(0xFF3A3F44), .55f)
-        val sky = Brush.verticalGradient(listOf(top, low))
-        val ground = Color(0xFF0E1011)
-        val far = lerp(ground, low, .38f)
-        val concrete = lerp(ground, Ivry.Beton, .16f)
-        val brick = lerp(ground, Ivry.Brique, .5f)
-        val green = p.nature
-        val base = h * .80f
-        val light = Ivry.Jaune.copy(alpha = if (night) .75f else .0f)
+        // Astre
+        val sunT = ((sky.minute - sky.sunrise).toFloat() / (sky.sunset - sky.sunrise).coerceAtLeast(1)).coerceIn(0f, 1f)
+        val sunPos = Offset(w * (.12f + .76f * sunT), h * (.46f - .36f * sin(PI * sunT).toFloat()))
+        val moonPos = Offset(w * .70f, h * .14f)
+        val astre = if (day > .5f) sunPos else moonPos
 
         onDrawBehind {
-            drawRect(sky)
+            drawRect(Brush.verticalGradient(listOf(top, low), startY = 0f, endY = base))
 
-            // Astre
-            if (night) drawCircle(Ivry.Ivoire.copy(alpha = .75f), h * .06f, Offset(w * .60f, h * .24f))
-            else if (!cloudy) drawCircle(
-                (if (dusk || dawn) Ivry.Orange else Ivry.Ivoire).copy(alpha = if (dusk || dawn) .55f else .22f),
-                h * .09f, Offset(w * .60f, h * (if (dusk || dawn) .62f else .26f)),
-            )
-            if (cloudy) for (i in 0..5) {
-                val cx = w * (.08f + i * .17f)
-                drawOval(Ivry.Beton.copy(alpha = .07f), Offset(cx, h * (.12f + (i % 3) * .07f)), Size(w * .14f, h * .12f))
+            // Étoiles
+            if (night > .2f) for (i in 0 until 90) {
+                val x = ((i * 7919) % 1000) / 1000f * w
+                val y = ((i * 104729) % 1000) / 1000f * base * .8f
+                drawCircle(Ivry.Ivoire.copy(alpha = (.15f + (i % 5) * .1f) * night * (1f - clouds)), 1.1f + (i % 3) * .5f, Offset(x, y))
+            }
+
+            // Soleil ou lune (avec sa phase réelle)
+            if (day > .5f) {
+                val warm = sunT < .15f || sunT > .85f
+                val c = if (warm) Ivry.Orange else Color(0xFFF6EBD0)
+                drawCircle(c.copy(alpha = .10f * (1f - clouds * .8f)), h * .12f, sunPos)
+                drawCircle(c.copy(alpha = .85f * (1f - clouds * .85f)), h * .035f, sunPos)
+            } else if (night > .3f) {
+                val r = h * .032f
+                val k = ((1 - cos(2 * PI * sky.moon)) / 2).toFloat()
+                drawCircle(Ivry.Ivoire.copy(alpha = .9f * (1f - clouds * .7f)), r, moonPos)
+                val dir = if (sky.moon < .5f) -1f else 1f
+                drawCircle(top, r * 1.02f, Offset(moonPos.x + dir * 2f * r * k, moonPos.y))
+                drawCircle(Ivry.Ivoire.copy(alpha = .05f * (1f - clouds)), r * 3.5f, moonPos)
+            }
+
+            // Nuages, proportionnels à la couverture réelle
+            val nClouds = (clouds * 9).toInt()
+            for (i in 0 until nClouds) {
+                val cx = w * (((i * 0.37f) + .05f) % 1f)
+                val cy = h * (.06f + (i % 4) * .07f)
+                val cw = w * (.16f + (i % 3) * .05f)
+                val col = lerp(Color(0xFF2A3036), Color(0xFFB7C0C5), day).copy(alpha = .10f + clouds * .14f)
+                drawOval(col, Offset(cx, cy), Size(cw, h * .06f))
+                drawOval(col, Offset(cx + cw * .2f, cy - h * .025f), Size(cw * .55f, h * .06f))
             }
 
             // Plan lointain : Paris et la petite couronne
-            for (i in 0 until 26) {
-                val x = i * w / 26f
-                val th = h * (.12f + ((i * 37) % 11) / 55f)
-                drawRect(far, Offset(x, base - th), Size(w / 30f, th))
+            for (i in 0 until 34) {
+                val x = i * w / 34f
+                val th = u * (.22f + ((i * 37) % 11) / 30f)
+                drawRect(far, Offset(x, base - th), Size(w / 40f, th))
             }
 
-            // Manufacture des Œillets : brique et toits en sheds
-            val mx0 = w * .03f; val mx1 = w * .27f; val roof = base - h * .20f; val tooth = (mx1 - mx0) / 8f
+            // Manufacture des Œillets : brique, toits en sheds, verrières
+            val mx0 = w * .08f; val mx1 = w * .33f; val roof = base - u * .42f; val tooth = (mx1 - mx0) / 9f
             drawPath(Path().apply {
                 moveTo(mx0, base); lineTo(mx0, roof)
                 var x = mx0
-                while (x < mx1 - 1f) { lineTo(x, roof - h * .09f); lineTo(x + tooth, roof); x += tooth }
+                while (x < mx1 - 1f) { lineTo(x, roof - u * .2f); lineTo(x + tooth, roof); x += tooth }
                 lineTo(mx1, base); close()
             }, brick)
-            var wx = mx0 + tooth * .25f
+            var wx = mx0 + tooth * .2f
             while (wx < mx1 - tooth * .4f) {
-                drawRect(Ivry.Sable.copy(alpha = if (night) .35f else .18f), Offset(wx, roof + h * .04f), Size(tooth * .45f, h * .09f))
+                drawRect(Ivry.Sable.copy(alpha = .14f + .36f * night), Offset(wx, roof + u * .08f), Size(tooth * .5f, u * .2f))
                 wx += tooth
             }
 
-            // Étoiles de Renaudie : volumes triangulaires en gradins, terrasses plantées
-            tri(Offset(w * .29f, base), Offset(w * .365f, base - h * .38f), Offset(w * .44f, base), concrete)
-            tri(Offset(w * .35f, base), Offset(w * .44f, base - h * .50f), Offset(w * .53f, base), lerp(concrete, Ivry.Sable, .12f))
-            tri(Offset(w * .43f, base), Offset(w * .50f, base - h * .32f), Offset(w * .57f, base), concrete)
+            // Étoiles de Renaudie : volumes triangulaires, terrasses plantées
+            tri(Offset(w * .35f, base), Offset(w * .41f, base - u * .75f), Offset(w * .47f, base), concrete)
+            tri(Offset(w * .40f, base), Offset(w * .475f, base - u * 1.0f), Offset(w * .55f, base), lerp(concrete, Ivry.Sable, .1f))
+            tri(Offset(w * .48f, base), Offset(w * .535f, base - u * .62f), Offset(w * .59f, base), concrete)
             for (k in 1..4) {
                 val t = k / 5f
-                val px = w * .44f + (w * .09f) * t
-                val py = base - h * .50f * (1 - t)
-                tri(Offset(px, py), Offset(px + w * .012f, py), Offset(px, py - h * .035f), green.copy(alpha = .8f))
-                val qx = w * .44f - (w * .09f) * t
-                tri(Offset(qx, py), Offset(qx - w * .012f, py), Offset(qx, py - h * .035f), green.copy(alpha = .6f))
+                val py = base - u * (1f - t)
+                val rx = w * .475f + w * .075f * t
+                val lx = w * .475f - w * .075f * t
+                tri(Offset(rx, py), Offset(rx + w * .011f, py), Offset(rx, py - u * .07f), green)
+                tri(Offset(lx, py), Offset(lx - w * .011f, py), Offset(lx, py - u * .07f), green.copy(alpha = .8f))
             }
 
-            // Terrasses de Renée Gailhoustet : tour en gradins végétalisés
-            val gx = w * .60f; val gw = w * .05f
+            // Terrasses de Renée Gailhoustet
+            val gx = w * .62f; val gw = w * .028f
             drawPath(Path().apply {
-                moveTo(gx, base); lineTo(gx, base - h * .64f); lineTo(gx + gw * .6f, base - h * .64f)
+                moveTo(gx, base); lineTo(gx, base - u * 1.15f); lineTo(gx + gw, base - u * 1.15f)
                 for (s in 0 until 4) {
-                    val y = base - h * (.64f - s * .13f)
-                    lineTo(gx + gw * (.6f + s * .2f), y); lineTo(gx + gw * (.6f + s * .2f), y + h * .13f)
-                    lineTo(gx + gw * (.8f + s * .2f), y + h * .13f)
+                    val y = base - u * (1.15f - s * .22f)
+                    lineTo(gx + gw * (1f + s * .5f), y); lineTo(gx + gw * (1f + s * .5f), y + u * .22f)
                 }
-                lineTo(gx + gw * 1.4f, base); close()
-            }, lerp(concrete, Ivry.Beton, .1f))
+                lineTo(gx + gw * 3.2f, base - u * .27f); lineTo(gx + gw * 3.2f, base); close()
+            }, lerp(concrete, Ivry.Beton, .08f))
             for (s in 0 until 4) {
-                val y = base - h * (.51f - s * .13f)
-                drawCircle(green, h * .018f, Offset(gx + gw * (.72f + s * .2f), y - h * .012f))
+                val y = base - u * (.93f - s * .22f)
+                drawCircle(green, u * .035f, Offset(gx + gw * (1.25f + s * .5f), y - u * .02f))
             }
+            windows(gx + gw * .15f, base - u * 1.1f, gw * .7f, u * 1.05f, 2, sky, 3)
 
             // Grands ensembles
-            listOf(.68f to .44f, .73f to .36f, .78f to .52f).forEach { (fx, fh) ->
-                val bx = w * fx; val bw = w * .04f; val bt = base - h * fh
-                drawRect(concrete, Offset(bx, bt), Size(bw, h * fh))
-                var yy = bt + h * .05f
-                var row = 0
-                while (yy < base - h * .04f) {
-                    for (c in 0..2) if ((row + c + fx.hashCode()) % 3 == 0)
-                        drawRect(light, Offset(bx + bw * (.15f + c * .28f), yy), Size(bw * .14f, h * .025f))
-                    yy += h * .06f; row++
-                }
+            listOf(.71f to .80f, .755f to .95f, .80f to .70f).forEachIndexed { i, (fx, fh) ->
+                val bx = w * fx; val bw = w * .036f; val bt = base - u * fh
+                drawRect(concrete, Offset(bx, bt), Size(bw, u * fh))
+                windows(bx + bw * .1f, bt + u * .05f, bw * .8f, u * fh - u * .1f, 3, sky, 11 + i * 17)
             }
 
             // Grues d'Ivry Confluences
-            crane(Offset(w * .87f, base), h * .62f, w * .09f, p.accent2.copy(alpha = .55f))
-            crane(Offset(w * .95f, base), h * .48f, w * .06f, p.accent2.copy(alpha = .4f))
+            crane(Offset(w * .88f, base), u * 1.2f, w * .08f, p.accent2.copy(alpha = .5f + .2f * day))
+            crane(Offset(w * .955f, base), u * .9f, w * .05f, p.accent2.copy(alpha = .35f + .2f * day))
+            if (night > .5f) {
+                drawCircle(Color(0xFFE24B4A).copy(alpha = .9f), 2.5f, Offset(w * .88f, base - u * 1.2f - 4f))
+                drawCircle(Color(0xFFE24B4A).copy(alpha = .9f), 2.5f, Offset(w * .955f, base - u * .9f - 4f))
+            }
 
             // Arbres des quais
-            for (i in 0 until 9) drawCircle(lerp(ground, green, .45f), h * .045f, Offset(w * (.05f + i * .11f), base - h * .02f))
+            for (i in 0 until 14) drawCircle(lerp(ground, p.nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))
 
-            // La Seine
-            drawRect(lerp(ground, Ivry.Bleu, .32f), Offset(0f, base), Size(w, h - base))
-            for (i in 0 until 14) {
-                val rx = w * (.02f + i * .07f)
-                drawLine(
-                    (if (night) Ivry.Jaune else Ivry.Ivoire).copy(alpha = if (night) .22f else .12f),
-                    Offset(rx, base + h * (.06f + (i % 3) * .04f)), Offset(rx + w * .03f, base + h * (.06f + (i % 3) * .04f)),
-                    strokeWidth = 2f,
-                )
+            // La Seine et ses reflets
+            drawRect(Brush.verticalGradient(listOf(river, lerp(river, ground, .6f)), startY = base, endY = h), Offset(0f, base), Size(w, h - base))
+            val refl = if (day > .5f) Color(0xFFF6EBD0) else Ivry.Ivoire
+            for (i in 0 until 8) {
+                val y = base + (h - base) * (.04f + i * .05f)
+                val half = w * (.035f - i * .003f)
+                drawLine(refl.copy(alpha = (.22f - i * .025f) * (1f - clouds * .7f)), Offset(astre.x - half, y), Offset(astre.x + half, y), 2f)
+            }
+            if (night > .3f) for (i in 0 until 16) {
+                val rx = w * (.05f + i * .06f)
+                drawLine(Ivry.Jaune.copy(alpha = .16f * night), Offset(rx, base + 8f + (i % 3) * 7f), Offset(rx + w * .02f, base + 8f + (i % 3) * 7f), 2f)
             }
 
-            // Pluie ou neige
-            if (rain) for (i in 0 until 60) {
-                val x = (i * 97 % 1000) / 1000f * w; val y = (i * 53 % 1000) / 1000f * base
-                drawLine(Ivry.Pluie.copy(alpha = .22f), Offset(x, y), Offset(x - h * .03f, y + h * .08f), 1.5f)
-            }
-            if (snow) for (i in 0 until 50) {
-                drawCircle(Ivry.Ivoire.copy(alpha = .45f), 2.2f, Offset((i * 97 % 1000) / 1000f * w, (i * 53 % 1000) / 1000f * base))
+            // Brouillard
+            if (sky.fog) for (i in 0 until 5) {
+                drawRect(Color(0xFF9AA4A8).copy(alpha = .10f), Offset(0f, h * (.18f + i * .07f)), Size(w, h * .05f))
             }
 
-            // Voile pour la lisibilité du texte
-            drawRect(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = .35f), Color.Transparent, Color.Black.copy(alpha = .3f))))
+            // Pluie (densité selon les précipitations réelles), neige, orage
+            if (sky.rain) {
+                val n = (30 + sky.precip * 40).toInt().coerceIn(30, 180)
+                for (i in 0 until n) {
+                    val x = ((i * 7919) % 1000) / 1000f * w
+                    val y = ((i * 6007) % 1000) / 1000f * h
+                    drawLine(Ivry.Pluie.copy(alpha = .20f), Offset(x, y), Offset(x - h * .015f, y + h * .045f), 1.5f)
+                }
+            }
+            if (sky.snow) for (i in 0 until 110) {
+                drawCircle(Ivry.Ivoire.copy(alpha = .5f), 1.5f + (i % 3), Offset(((i * 7919) % 1000) / 1000f * w, ((i * 6007) % 1000) / 1000f * h))
+            }
+            if (sky.storm) {
+                drawRect(Color(0xFF3C3489).copy(alpha = .10f))
+                drawPath(Path().apply {
+                    moveTo(w * .30f, h * .05f); lineTo(w * .28f, h * .17f); lineTo(w * .305f, h * .17f); lineTo(w * .275f, h * .30f)
+                }, Ivry.Ivoire.copy(alpha = .45f), style = Stroke(2f))
+            }
+
+            // Voiles de lisibilité : en-tête en haut, modules en bas
+            drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .35f), Color.Transparent), endY = h * .18f))
+            drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .35f)), startY = h * .5f, endY = h))
         }
     })
+}
+
+/** Fenêtres qui s'allument progressivement avec la nuit (motif fixe, pas d'animation). */
+private fun DrawScope.windows(x: Float, y: Float, w: Float, h: Float, cols: Int, sky: SkyState, seed: Int) {
+    val rows = (h / (size.height * .028f)).toInt().coerceAtLeast(1)
+    val cw = w / cols
+    val rh = h / rows
+    for (r in 0 until rows) for (c in 0 until cols) {
+        val lit = ((r * 7 + c * 13 + seed * 31) % 100) < (sky.night * 62 + 4)
+        if (lit) drawRect(Ivry.Jaune.copy(alpha = .75f), Offset(x + c * cw + cw * .3f, y + r * rh + rh * .3f), Size(cw * .35f, rh * .4f))
+    }
 }
 
 private fun DrawScope.tri(a: Offset, b: Offset, c: Offset, color: Color) {
@@ -230,20 +313,53 @@ private fun DrawScope.crane(foot: Offset, height: Float, jib: Float, color: Colo
     drawRect(color, Offset(top.x - jib * .35f, top.y + 6f), Size(jib * .12f, 10f), style = Stroke(2f))
 }
 
-/** Frise en dents de scie : les toits en sheds de la Manufacture. */
+// ======================= En-tête =======================
+
+private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH)
+
+/** En-tête posé directement dans le ciel, sans cadre. */
 @Composable
-fun ShedFrieze(modifier: Modifier = Modifier, color: Color = LocalPalette.current.accent) {
-    Spacer(modifier.fillMaxWidth().height(8.dp).drawWithCache {
-        val tooth = size.height * 2.4f
-        val path = Path().apply {
-            moveTo(0f, size.height)
-            var x = 0f
-            while (x < size.width) { lineTo(x, 0f); lineTo(x + tooth, size.height); x += tooth }
-            close()
+fun IvryHeader(weather: CurrentWeather?, online: Boolean, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val hour = Instant.ofEpochMilli(rememberTick(60_000)).atZone(PARIS).hour
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Text("Ivry-sur-Seine", fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.ExtraBold,
+                color = Ivry.Ivoire, letterSpacing = (-0.5).sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val line = greeting(hour) + (weather?.let { " · ${wmoLabel(it.code).lowercase()}, ${deg(it.temp)}" } ?: "")
+                Text(line, fontSize = 13.sp, color = Ivry.Ivoire.copy(alpha = .85f))
+                Spacer(Modifier.width(10.dp))
+                Tag(if (online) "EN LIGNE" else "HORS LIGNE", if (online) p.nature else p.warn)
+            }
         }
-        onDrawBehind { drawPath(path, color.copy(alpha = .4f)) }
-    })
+        Clock()
+        Spacer(Modifier.width(14.dp))
+        Plate(Modifier.size(40.dp), shape = CutCornerShape(topEnd = 12.dp), onClick = onSettings) { f ->
+            Icon(Icons.Default.Settings, "Paramètres", tint = if (f) p.focus else Ivry.Ivoire,
+                modifier = Modifier.align(Alignment.Center).size(20.dp))
+        }
+    }
 }
+
+@Composable
+private fun Clock() {
+    val z = Instant.ofEpochMilli(rememberTick(1_000)).atZone(PARIS)
+    Column(horizontalAlignment = Alignment.End) {
+        Text(TIME.format(z), fontSize = 42.sp, lineHeight = 44.sp, fontWeight = FontWeight.ExtraBold, color = Ivry.Ivoire)
+        Text(DATE.format(z).replaceFirstChar { it.uppercase() }, fontSize = 13.sp, color = Ivry.Ivoire.copy(alpha = .85f))
+    }
+}
+
+private fun greeting(h: Int) = when (h) {
+    in 5..11 -> "Bonjour"
+    in 12..17 -> "Bon après-midi"
+    in 18..22 -> "Bonsoir"
+    else -> "Bonne nuit"
+}
+
+// ======================= Petits motifs =======================
 
 /** Petite terrasse plantée en coin de module, clin d'œil à Renaudie. */
 @Composable
@@ -254,7 +370,7 @@ fun BoxScope.TerraceMark(bottom: Boolean = true) {
         close()
     }
     Box(
-        Modifier.align(if (bottom) Alignment.BottomEnd else Alignment.TopEnd).padding(6.dp).size(14.dp)
+        Modifier.align(if (bottom) Alignment.BottomEnd else Alignment.TopEnd).padding(6.dp).size(12.dp)
             .background(LocalPalette.current.nature.copy(alpha = .85f), shape)
     )
 }
