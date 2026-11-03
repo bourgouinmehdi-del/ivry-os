@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Fournis par GitHub Actions ; absents en local (Android Studio signe alors en debug).
+val ciKeystore: String? = System.getenv("IVRY_KEYSTORE")
+val ciVersion: Int = System.getenv("IVRY_VERSION_CODE")?.toIntOrNull() ?: 1
+
 android {
     namespace = "fr.ivry.os"
     compileSdk = 34
@@ -12,15 +16,25 @@ android {
         applicationId = "fr.ivry.os"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersion
+        versionName = "1.$ciVersion"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (ciKeystore != null) {
+                storeFile = file(ciKeystore)
+                storePassword = System.getenv("IVRY_KEYSTORE_PASSWORD")
+                keyAlias = "ivry"
+                keyPassword = System.getenv("IVRY_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = false
+            signingConfig = if (ciKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
     compileOptions {

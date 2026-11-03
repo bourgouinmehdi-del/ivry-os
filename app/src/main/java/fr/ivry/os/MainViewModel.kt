@@ -10,6 +10,10 @@ import fr.ivry.os.data.AppsRepository
 import fr.ivry.os.data.DataEngine
 import fr.ivry.os.data.Keys
 import fr.ivry.os.data.SettingsRepo
+import fr.ivry.os.data.UpdateInfo
+import fr.ivry.os.data.Updater
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,12 +29,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps.asStateFlow()
 
+    /** État des mises à jour publiées sur GitHub. */
+    data class UpdateUi(val info: UpdateInfo? = null, val busy: Boolean = false, val message: String? = null)
+    val update = MutableStateFlow(UpdateUi())
+    val installedVersion: Int get() = Updater.currentVersion(appCtx)
+
     /** Application en cours de lancement (déclenche la transition plein écran). */
     val pendingLaunch = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch { settings.firstRun() }
         engine.start()
+        viewModelScope.launch {
+            while (isActive) { checkUpdate(manual = false); delay(6 * 3_600_000L) }
+        }
+    }
+
+    fun checkUpdate(manual: Boolean = true) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (manual) update.value = update.value.copy(busy = true, message = null)
+            val r = runCatching { Updater.check(appCtx) }
+            update.value = when {
+                r.isFailure -> update.value.copy(busy = false, message = if (manual) "Vérification impossible pour le moment" else null)
+                r.getOrNull() == null -> UpdateUi(message = if (manual) "IVRY OS est à jour" else null)
+                else -> UpdateUi(info = r.getOrNull())
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val info = update.value.info ?: return
+        if (!Updater.canInstall(appCtx)) {
+            update.value = update.value.copy(message = "Autorise IVRY OS à installer des applis, puis réessaie")
+            Updater.openInstallPermission(appCtx)
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            update.value = update.value.copy(busy = true, message = "Téléchargement…")
+            runCatching { Updater.download(appCtx, info) }
+                .onSuccess { apk ->
+                    update.value = update.value.copy(busy = false, message = null)
+                    runCatching { Updater.install(appCtx, apk) }
+                        .onFailure { update.value = update.value.copy(message = "Installation impossible : ${it.message}") }
+                }
+                .onFailure { update.value = update.value.copy(busy = false, message = "Téléchargement impossible") }
+        }
     }
 
     fun refreshApps() {

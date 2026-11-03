@@ -68,6 +68,21 @@ fun HomeScreen(
             buildAlerts(weather.value, forecast.value, velib.value)
         }
         if (alerts.isNotEmpty()) AlertsRow(alerts, Modifier.padding(top = 6.dp))
+        val update by vm.update.collectAsStateWithLifecycle()
+        update.info?.let { info ->
+            Plate(Modifier.padding(top = 6.dp).height(30.dp), shape = CutCornerShape(topEnd = 8.dp),
+                background = Ivry.Jaune.copy(alpha = .9f), onClick = { vm.installUpdate() }) { f ->
+                Text(
+                    when {
+                        update.busy -> "Téléchargement de ${info.name}…"
+                        update.message != null -> update.message!!
+                        else -> "Mise à jour disponible : ${info.name} · OK pour installer"
+                    },
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ivry.Asphalte,
+                    modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp),
+                )
+            }
+        }
 
         // La ville reste visible entre l'en-tête et les modules
         Spacer(Modifier.weight(.25f))

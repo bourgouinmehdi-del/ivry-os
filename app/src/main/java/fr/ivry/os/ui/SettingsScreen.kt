@@ -130,6 +130,15 @@ fun SettingsScreen(vm: MainViewModel, prefs: Prefs) {
         )
         ActionButton("Actualiser toutes les données", Icons.Default.Refresh) { vm.engine.refreshNow() }
 
+        Group("Mise à jour")
+        val update by vm.update.collectAsStateWithLifecycle()
+        Text("Version installée : IVRY OS 1.${vm.installedVersion}", fontSize = 13.sp, color = p.text)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            ActionButton(if (update.busy) "Vérification…" else "Rechercher une mise à jour", Icons.Default.Refresh) { vm.checkUpdate() }
+            update.info?.let { ActionButton("Installer ${it.name}") { vm.installUpdate() } }
+        }
+        update.message?.let { Text(it, fontSize = 12.sp, color = p.textDim) }
+
         Group("Centre de contrôle")
         ControlCenter(ctx)
 
