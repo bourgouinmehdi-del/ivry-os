@@ -16,6 +16,9 @@ import java.io.IOException
 
 private val Context.dataStore by preferencesDataStore(name = "ivry_settings")
 
+/** RER C à Ivry : on écarte les trains vers le sud pour ne garder que ceux vers Paris et le nord. */
+const val RER_NORD = "!Juvisy,!Brétigny,!Bretigny,!Étampes,!Etampes,!Dourdan,!Massy,!Rungis,!Orly,!Choisy,!Ardoines,!Athis,!Savigny,!Saint-Michel-sur-Orge,!Vitry"
+
 enum class ThemeName(val label: String, val tagline: String) {
     MANUFACTURE("Manufacture", "Brique, acier, noir industriel"),
     RENAUDIE("Renaudie", "Géométrie, béton, sable"),
@@ -39,7 +42,7 @@ data class Prefs(
     val metroFilter: String = "Courneuve",
     val rerStopRef: String = "",
     val rerLineRef: String = "STIF:Line::C01727:",
-    val rerFilter: String = "",
+    val rerFilter: String = RER_NORD,
     val velibCode: String = "42021",
     val metroWalk: Int = 5,
     val rerWalk: Int = 8,
@@ -136,7 +139,7 @@ class SettingsRepo(context: Context) {
         metroFilter = this[Keys.metroFilter] ?: "Courneuve",
         rerStopRef = this[Keys.rerStop] ?: "",
         rerLineRef = this[Keys.rerLine] ?: "STIF:Line::C01727:",
-        rerFilter = this[Keys.rerFilter] ?: "",
+        rerFilter = this[Keys.rerFilter] ?: RER_NORD,
         velibCode = this[Keys.velibCode] ?: "42021",
         metroWalk = this[Keys.metroWalk] ?: 5,
         rerWalk = this[Keys.rerWalk] ?: 8,

@@ -123,7 +123,10 @@ object Sources {
     /** txt = {"sm": <réponse stop-monitoring>, "gm": <réponse general-message ou null>} */
     fun parseTransit(txt: String, filter: String, max: Int = 8): Transit {
         val root = JSONObject(txt)
-        val keywords = filter.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        // Filtre : mots séparés par des virgules ; « !mot » exclut, les autres mots doivent correspondre
+        val words = filter.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val excludes = words.filter { it.startsWith("!") }.map { it.drop(1).trim() }.filter { it.isNotEmpty() }
+        val keywords = words.filterNot { it.startsWith("!") }
         val visits = root.getJSONObject("sm").getJSONObject("Siri").getJSONObject("ServiceDelivery")
             .getJSONArray("StopMonitoringDelivery").getJSONObject(0)
             .optJSONArray("MonitoredStopVisit") ?: JSONArray()
@@ -135,6 +138,7 @@ object Sources {
             val call = mvj.optJSONObject("MonitoredCall") ?: continue
             val dest = mvj.valueOf("DestinationName") ?: call.valueOf("DestinationDisplay") ?: "?"
             val dir = mvj.valueOf("DirectionName") ?: ""
+            if (excludes.any { k -> dest.contains(k, ignoreCase = true) || dir.contains(k, ignoreCase = true) }) continue
             if (keywords.isNotEmpty() && keywords.none { k ->
                     dest.contains(k, ignoreCase = true) || dir.contains(k, ignoreCase = true)
                 }) continue
