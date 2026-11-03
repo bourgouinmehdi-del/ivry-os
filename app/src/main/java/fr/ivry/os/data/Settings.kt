@@ -1,0 +1,148 @@
+package fr.ivry.os.data
+
+import android.app.ActivityManager
+import android.content.Context
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import java.io.IOException
+
+private val Context.dataStore by preferencesDataStore(name = "ivry_settings")
+
+enum class ThemeName(val label: String, val tagline: String) {
+    MANUFACTURE("Manufacture", "Brique, acier, noir industriel"),
+    RENAUDIE("Renaudie", "Géométrie, béton, sable"),
+    POPULAIRE("Populaire", "Orange, jaune, affiches"),
+    CONFLUENCES("Confluences", "Bleu, vert, lumière"),
+}
+
+data class Prefs(
+    val theme: ThemeName = ThemeName.MANUFACTURE,
+    val permanentDisplay: Boolean = false,
+    val antiBurnIn: Boolean = true,
+    val dimLevel: Int = 0,          // 0..6 → 0 à 60 %
+    val darkBoost: Boolean = false,
+    val performance: Boolean = false,
+    val glass: Int = 6,             // 2..9 → opacité du verre
+    val proxyUrl: String = "",
+    val proxyToken: String = "",
+    val metroStopRef: String = "",
+    val metroLineRef: String = "STIF:Line::C01377:",
+    val metroFilter: String = "Courneuve",
+    val rerStopRef: String = "",
+    val rerLineRef: String = "STIF:Line::C01727:",
+    val rerFilter: String = "",
+    val velibCode: String = "42021",
+    val favorites: List<String> = emptyList(),
+    val launchCounts: Map<String, Int> = emptyMap(),
+)
+
+object Keys {
+    val theme = stringPreferencesKey("theme")
+    val permanent = booleanPreferencesKey("permanent")
+    val antiBurn = booleanPreferencesKey("anti_burn")
+    val dim = intPreferencesKey("dim")
+    val darkBoost = booleanPreferencesKey("dark_boost")
+    val performance = booleanPreferencesKey("performance")
+    val glass = intPreferencesKey("glass")
+    val proxyUrl = stringPreferencesKey("proxy_url")
+    val proxyToken = stringPreferencesKey("proxy_token")
+    val metroStop = stringPreferencesKey("metro_stop")
+    val metroLine = stringPreferencesKey("metro_line")
+    val metroFilter = stringPreferencesKey("metro_filter")
+    val rerStop = stringPreferencesKey("rer_stop")
+    val rerLine = stringPreferencesKey("rer_line")
+    val rerFilter = stringPreferencesKey("rer_filter")
+    val velibCode = stringPreferencesKey("velib_code")
+    val favorites = stringPreferencesKey("favorites")
+    val counts = stringPreferencesKey("counts")
+    val firstRunDone = booleanPreferencesKey("first_run_done")
+}
+
+class SettingsRepo(context: Context) {
+    private val ctx = context.applicationContext
+
+    val prefs: Flow<Prefs> = ctx.dataStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it.toPrefs() }
+
+    suspend fun <T> set(key: Preferences.Key<T>, value: T) {
+        ctx.dataStore.edit { it[key] = value }
+    }
+
+    suspend fun toggleFavorite(pkg: String) {
+        ctx.dataStore.edit {
+            val l = decodeList(it[Keys.favorites]).toMutableList()
+            if (!l.remove(pkg)) l.add(pkg)
+            it[Keys.favorites] = l.joinToString(",")
+        }
+    }
+
+    suspend fun moveFavorite(pkg: String, delta: Int) {
+        ctx.dataStore.edit {
+            val l = decodeList(it[Keys.favorites]).toMutableList()
+            val i = l.indexOf(pkg)
+            val j = i + delta
+            if (i >= 0 && j in l.indices) {
+                l.removeAt(i); l.add(j, pkg)
+                it[Keys.favorites] = l.joinToString(",")
+            }
+        }
+    }
+
+    suspend fun recordLaunch(pkg: String) {
+        ctx.dataStore.edit {
+            val m = decodeCounts(it[Keys.counts]).toMutableMap()
+            m[pkg] = (m[pkg] ?: 0) + 1
+            it[Keys.counts] = m.entries.joinToString("|") { e -> "${e.key}=${e.value}" }
+        }
+    }
+
+    /** Premier lancement : on adapte le mode performance aux ressources réelles de l'appareil. */
+    suspend fun firstRun() {
+        ctx.dataStore.edit {
+            if (it[Keys.firstRunDone] != true) {
+                it[Keys.firstRunDone] = true
+                val am = ctx.getSystemService(ActivityManager::class.java)
+                it[Keys.performance] = am?.isLowRamDevice == true
+            }
+        }
+    }
+
+    private fun Preferences.toPrefs() = Prefs(
+        theme = this[Keys.theme]?.let { n -> ThemeName.entries.firstOrNull { it.name == n } } ?: ThemeName.MANUFACTURE,
+        permanentDisplay = this[Keys.permanent] ?: false,
+        antiBurnIn = this[Keys.antiBurn] ?: true,
+        dimLevel = this[Keys.dim] ?: 0,
+        darkBoost = this[Keys.darkBoost] ?: false,
+        performance = this[Keys.performance] ?: false,
+        glass = this[Keys.glass] ?: 6,
+        proxyUrl = this[Keys.proxyUrl] ?: "",
+        proxyToken = this[Keys.proxyToken] ?: "",
+        metroStopRef = this[Keys.metroStop] ?: "",
+        metroLineRef = this[Keys.metroLine] ?: "STIF:Line::C01377:",
+        metroFilter = this[Keys.metroFilter] ?: "Courneuve",
+        rerStopRef = this[Keys.rerStop] ?: "",
+        rerLineRef = this[Keys.rerLine] ?: "STIF:Line::C01727:",
+        rerFilter = this[Keys.rerFilter] ?: "",
+        velibCode = this[Keys.velibCode] ?: "42021",
+        favorites = decodeList(this[Keys.favorites]),
+        launchCounts = decodeCounts(this[Keys.counts]),
+    )
+
+    private fun decodeList(s: String?): List<String> =
+        s?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+
+    private fun decodeCounts(s: String?): Map<String, Int> =
+        s?.split('|')?.mapNotNull { e ->
+            val i = e.lastIndexOf('=')
+            if (i <= 0) null else e.substring(0, i) to (e.substring(i + 1).toIntOrNull() ?: 0)
+        }?.toMap() ?: emptyMap()
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Ivry" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/asphalte</item>
+        <item name="android:statusBarColor">@color/asphalte</item>
+        <item name="android:navigationBarColor">@color/asphalte</item>
+    </style>
+    <color name="asphalte">#17191A</color>
+</resources>
