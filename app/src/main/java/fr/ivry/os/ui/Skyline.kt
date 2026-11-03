@@ -122,8 +122,8 @@ private fun SkyState.gradient(): Grad {
 
 /** Géométrie commune aux calques de la scène. */
 private class Geo(val w: Float, val h: Float) {
-    val base = h * .45f
-    val u = h * .29f
+    val base = h * .395f
+    val u = h * .27f
 }
 
 /** Horloge de la scène, en secondes, rafraîchie à 20 images/s au plus. Figée si désactivée. */
@@ -153,7 +153,13 @@ private fun rememberSceneClock(enabled: Boolean, slow: Boolean): State<Float> {
  * Calques fixes (ciel, ville) mis en cache ; seuls les calques animés se redessinent.
  */
 @Composable
-fun CityScene(sky: SkyState, modifier: Modifier = Modifier, animate: Boolean = true, slow: Boolean = false) {
+fun CityScene(
+    sky: SkyState,
+    modifier: Modifier = Modifier,
+    animate: Boolean = true,
+    slow: Boolean = false,
+    trainTimes: List<Long> = emptyList(),
+) {
     val p = LocalPalette.current
     val time = rememberSceneClock(enabled = animate, slow = slow)
     Box(modifier) {
@@ -221,59 +227,8 @@ fun CityScene(sky: SkyState, modifier: Modifier = Modifier, animate: Boolean = t
             val clouds = sky.cloud / 100f
             val night = sky.night
 
-            // RER C : rame à deux niveaux (4 voitures), un passage par minute
-            val ph = (t % 60f) / 22f
-            if (ph < 1f) {
-                val n = 4
-                val len = g.w * .34f
-                val car = len / n
-                val hh = g.u * .12f
-                val deck = g.base + g.u * .01f
-                val y = deck - hh
-                val x = g.w - ph * (g.w + len)
-                val body = lerp(Color(0xFF3A4046), Color(0xFFE9EBEC), .25f + .75f * sky.daylight)
-                val band = Color(0xFF1F2D4A)
-                val lit = lerp(Color(0xFF55606A), Color(0xFFF2D47A), night)
-                val steelC = lerp(Color(0xFF1A1F22), Color(0xFF8A9296), sky.daylight)
-                for (c in 0 until n) {
-                    val cx = x + c * car
-                    when (c) {
-                        0 -> drawPath(Path().apply {
-                            moveTo(cx + car * .12f, y); lineTo(cx + car - 2f, y); lineTo(cx + car - 2f, y + hh)
-                            lineTo(cx, y + hh); lineTo(cx, y + hh * .45f); close()
-                        }, body)
-                        n - 1 -> drawPath(Path().apply {
-                            moveTo(cx + 1f, y); lineTo(cx + car * .88f, y); lineTo(cx + car, y + hh * .45f)
-                            lineTo(cx + car, y + hh); lineTo(cx + 1f, y + hh); close()
-                        }, body)
-                        else -> drawRect(body, Offset(cx + 1f, y), Size(car - 3f, hh))
-                    }
-                    for (row in 0..1) {
-                        val by = y + hh * (.12f + row * .34f)
-                        drawRect(band, Offset(cx + car * .14f, by), Size(car * .72f, hh * .24f))
-                        var wx = cx + car * .17f
-                        while (wx < cx + car * .82f) {
-                            drawRect(lit, Offset(wx, by + hh * .04f), Size(car * .055f, hh * .16f))
-                            wx += car * .08f
-                        }
-                    }
-                    for (d in listOf(.09f, .87f)) drawRect(band, Offset(cx + car * d, y + hh * .36f), Size(car * .045f, hh * .5f))
-                    drawRect(Color(0xFFC8102E), Offset(cx + 1f, y + hh * .86f), Size(car - 3f, hh * .05f))
-                }
-                // Pare-brise, phares et pantographe
-                drawPath(Path().apply {
-                    moveTo(x + car * .12f, y + hh * .05f); lineTo(x + car * .2f, y + hh * .05f)
-                    lineTo(x + car * .06f, y + hh * .4f); lineTo(x + car * .01f, y + hh * .4f); close()
-                }, band)
-                drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .03f, y + hh * .72f))
-                drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .08f, y + hh * .72f))
-                val pxx = x + car * 1.5f
-                val top = deck - g.u * .17f
-                drawLine(steelC, Offset(pxx - car * .08f, y), Offset(pxx, top), 1.5f)
-                drawLine(steelC, Offset(pxx + car * .08f, y), Offset(pxx, top), 1.5f)
-                drawLine(steelC, Offset(pxx - car * .07f, top), Offset(pxx + car * .07f, top), 2f)
-                drawLine(Ivry.Jaune.copy(alpha = .12f + .2f * night), Offset(x, g.base + 10f), Offset(x + len, g.base + 10f), 3f)
-            }
+            // RER C : arrêts en gare aux horaires réels, sinon simple passage toutes les 90 s
+            drawRer(g, sky, t, trainTimes)
 
             // Reflets de l'astre qui ondulent
             val astre = if (sky.daylight > .5f) sky.sunPos(g) else Offset(g.w * .70f, g.h * .14f)
@@ -445,7 +400,7 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     while (px < w) { drawRect(lerp(ground, Ivry.Beton, .10f + .08f * day), Offset(px, ty + u * .14f), Size(u * .02f, u * .06f)); px += w * .05f }
     // Caténaire : poteaux et fil au-dessus de la voie
     val deck = base + u * .01f
-    val wire = deck - u * .17f
+    val wire = deck - u * .23f
     val mast = lerp(ground, Ivry.Beton, .22f + .15f * day)
     var mx = w * .02f
     while (mx < w) {
@@ -454,6 +409,17 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
         mx += w * .09f
     }
     drawLine(mast, Offset(0f, wire), Offset(w, wire), 1.2f)
+
+    // Gare d'Ivry-sur-Seine : quai, abri, panneau RER
+    val q0 = w * STATION_X0; val q1 = w * STATION_X1
+    drawRect(lerp(ground, Ivry.Beton, .30f + .25f * day), Offset(q0, deck), Size(q1 - q0, u * .05f))
+    drawRect(lerp(ground, Ivry.Beton, .18f + .15f * day), Offset(q0, deck + u * .05f), Size(q1 - q0, u * .03f))
+    val roofY = deck - u * .21f
+    drawRect(lerp(ground, Ivry.Beton, .25f + .2f * day), Offset(q0 + w * .02f, roofY), Size(w * .16f, u * .02f))
+    for (k in 0..3) drawLine(mast, Offset(q0 + w * (.03f + k * .05f), roofY), Offset(q0 + w * (.03f + k * .05f), deck), 2f)
+    drawRect(Color(0xFF1F2D4A), Offset(q0 + w * .005f, deck - u * .16f), Size(w * .022f, u * .07f))
+    drawCircle(Color(0xFFF3D311), u * .022f, Offset(q0 + w * .016f, deck - u * .125f))
+    drawLine(mast, Offset(q0 + w * .016f, deck - u * .09f), Offset(q0 + w * .016f, deck), 2f)
 
     // Arbres des quais
     for (i in 0 until 14) drawCircle(lerp(ground, nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))
@@ -473,6 +439,141 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     // Voiles de lisibilité : en-tête en haut, modules en bas
     drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .35f), Color.Transparent), endY = h * .18f))
     drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .35f)), startY = h * .5f, endY = h))
+}
+
+// ======================= RER C et voyageurs =======================
+
+private const val STATION_X0 = .16f
+private const val STATION_X1 = .62f
+
+private fun h32(a: Long, b: Int = 0): Int {
+    var x = a * 31L + b * 1_000_003L
+    x = x xor (x ushr 33)
+    x *= 0x62A9D9ED799705F5L
+    x = x xor (x ushr 29)
+    return (x and 0x7fffffffL).toInt()
+}
+
+private fun DrawScope.drawRer(g: Geo, sky: SkyState, t: Float, times: List<Long>) {
+    val night = sky.night
+    val n = 4
+    val len = g.w * .40f
+    val car = len / n
+    val hh = g.u * .16f
+    val deck = g.base + g.u * .01f
+    val xStop = g.w * (STATION_X0 + .03f)
+    val now = System.currentTimeMillis()
+
+    if (times.isEmpty()) {
+        // Pas d'horaires : simple passage sans arrêt
+        val ph = (t % 90f) / 24f
+        if (ph < 1f) drawTrain(g.w - ph * (g.w + len), deck, hh, car, n, sky, doorsOpen = false)
+        return
+    }
+    for (tt in times) {
+        val s = (now - tt) / 1000f
+        if (s < -12f || s > 26f) continue
+        val x = when {
+            s < -4f -> { val q = (s + 12f) / 8f; val e = 1f - (1f - q) * (1f - q); g.w + 10f + (xStop - g.w - 10f) * e }
+            s < 6f -> xStop
+            else -> { val q = ((s - 6f) / 8f).coerceAtMost(1.2f); xStop + (-len - 20f - xStop) * q * q }
+        }
+        if (x > -len - 10f) drawTrain(x, deck, hh, car, n, sky, doorsOpen = s in -3.5f..5.5f)
+
+        // Voyageurs qui descendent : plus nombreux aux heures de pointe
+        val hour = sky.minute / 60
+        val crowd = when (hour) { in 7..9, in 17..19 -> 26; in 22..23, in 0..5 -> 4; else -> 12 }
+        val q0 = g.w * STATION_X0; val q1 = g.w * STATION_X1
+        val size = hh * .62f
+        for (i in 0 until crowd) {
+            val ts = -3.2f + i * .2f
+            if (s < ts) continue
+            val r = h32(tt, i)
+            val doorCar = (r % n)
+            val doorX = xStop + doorCar * car + car * (if ((r shr 3) % 2 == 0) .11f else .89f)
+            val dir = if ((r shr 5) % 2 == 0) -1f else 1f
+            val speed = g.w * (.018f + ((r shr 7) % 10) / 900f)
+            val px = doorX + dir * speed * (s - ts)
+            if (px < q0 || px > q1) continue
+            val shade = listOf(Color(0xFF2A2F3A), Color(0xFF4A2F2A), Color(0xFF2F3A2E), Color(0xFF3A3346), Color(0xFF203040))[r % 5]
+            person(px, deck, size, lerp(shade, Color(0xFF8A919A), sky.daylight * .4f), (s - ts) * 9f, moving = true)
+        }
+
+        // Quelqu'un court après le train, de temps en temps
+        val rr = h32(tt, 999)
+        if (rr % 3 == 0) {
+            val catches = (rr shr 4) % 2 == 0
+            val target = xStop + len * .97f
+            val speed = g.w * .07f
+            val arrive = if (catches) 5.0f else 7.0f
+            val x0 = target + speed * (arrive - 1.5f)
+            if (s >= 1.5f) {
+                if (s < arrive) person(x0 - speed * (s - 1.5f), deck, size, Color(0xFFE76A43), s * 16f, moving = true)
+                else if (!catches && s < 14f) person(target, deck, size, Color(0xFFE76A43), 0f, moving = false, armsUp = true)
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawTrain(x: Float, deck: Float, hh: Float, car: Float, n: Int, sky: SkyState, doorsOpen: Boolean) {
+    val y = deck - hh
+    val body = lerp(Color(0xFF3A4046), Color(0xFFE9EBEC), .25f + .75f * sky.daylight)
+    val band = Color(0xFF1F2D4A)
+    val lit = lerp(Color(0xFF55606A), Color(0xFFF2D47A), sky.night)
+    val steelC = lerp(Color(0xFF1A1F22), Color(0xFF8A9296), sky.daylight)
+    for (c in 0 until n) {
+        val cx = x + c * car
+        when (c) {
+            0 -> drawPath(Path().apply {
+                moveTo(cx + car * .12f, y); lineTo(cx + car - 2f, y); lineTo(cx + car - 2f, y + hh)
+                lineTo(cx, y + hh); lineTo(cx, y + hh * .45f); close()
+            }, body)
+            n - 1 -> drawPath(Path().apply {
+                moveTo(cx + 1f, y); lineTo(cx + car * .88f, y); lineTo(cx + car, y + hh * .45f)
+                lineTo(cx + car, y + hh); lineTo(cx + 1f, y + hh); close()
+            }, body)
+            else -> drawRect(body, Offset(cx + 1f, y), Size(car - 3f, hh))
+        }
+        for (row in 0..1) {
+            val by = y + hh * (.12f + row * .34f)
+            drawRect(band, Offset(cx + car * .16f, by), Size(car * .68f, hh * .24f))
+            var wx = cx + car * .19f
+            while (wx < cx + car * .8f) {
+                drawRect(lit, Offset(wx, by + hh * .04f), Size(car * .05f, hh * .16f))
+                wx += car * .075f
+            }
+        }
+        for (d in listOf(.09f, .87f)) {
+            val door = if (doorsOpen) lerp(Color(0xFF55606A), Color(0xFFF2D47A), .5f + .5f * sky.night) else band
+            drawRect(door, Offset(cx + car * d, y + hh * .36f), Size(car * .045f, hh * .5f))
+        }
+        drawRect(Color(0xFFC8102E), Offset(cx + 1f, y + hh * .86f), Size(car - 3f, hh * .05f))
+    }
+    drawPath(Path().apply {
+        moveTo(x + car * .12f, y + hh * .05f); lineTo(x + car * .2f, y + hh * .05f)
+        lineTo(x + car * .06f, y + hh * .4f); lineTo(x + car * .01f, y + hh * .4f); close()
+    }, band)
+    drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .03f, y + hh * .72f))
+    drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .08f, y + hh * .72f))
+    val pxx = x + car * 1.5f
+    val top = deck - size.height * .27f * .23f
+    drawLine(steelC, Offset(pxx - car * .08f, y), Offset(pxx, top), 1.5f)
+    drawLine(steelC, Offset(pxx + car * .08f, y), Offset(pxx, top), 1.5f)
+    drawLine(steelC, Offset(pxx - car * .07f, top), Offset(pxx + car * .07f, top), 2f)
+}
+
+/** Silhouette simple : tête, corps, jambes qui alternent en marchant. */
+private fun DrawScope.person(x: Float, foot: Float, s: Float, color: Color, phase: Float, moving: Boolean, armsUp: Boolean = false) {
+    val swing = if (moving) sin(phase) * s * .14f else 0f
+    val hip = foot - s * .38f
+    drawLine(color, Offset(x, hip), Offset(x - swing, foot), s * .09f)
+    drawLine(color, Offset(x, hip), Offset(x + swing, foot), s * .09f)
+    drawRect(color, Offset(x - s * .1f, foot - s * .78f), Size(s * .2f, s * .42f))
+    drawCircle(color, s * .11f, Offset(x, foot - s * .88f))
+    if (armsUp) {
+        drawLine(color, Offset(x - s * .08f, foot - s * .74f), Offset(x - s * .2f, foot - s * 1.05f), s * .07f)
+        drawLine(color, Offset(x + s * .08f, foot - s * .74f), Offset(x + s * .2f, foot - s * 1.05f), s * .07f)
+    }
 }
 
 /** Fenêtres qui s'allument progressivement avec la nuit (motif fixe, pas d'animation). */

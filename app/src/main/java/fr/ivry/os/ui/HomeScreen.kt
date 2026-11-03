@@ -1,8 +1,6 @@
 package fr.ivry.os.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -171,12 +173,25 @@ private fun AgendaCard(live: Live<List<AgendaEvent>>, configured: Boolean, modif
     }
 }
 
-/** Fil d'actualité défilant, sur toute la largeur. */
-@OptIn(ExperimentalFoundationApi::class)
+/** Fil d'actualité défilant, sur toute la largeur, avancé à chaque image pour un mouvement régulier. */
 @Composable
 private fun NewsTicker(live: Live<List<String>>, source: String) {
     val items = live.value
     if (items.isNullOrEmpty()) return
+    val text = remember(items) { items.joinToString("      •      ") + "      •      " }
+    var width by remember { mutableIntStateOf(0) }
+    val offset = remember { mutableFloatStateOf(0f) }
+    val speed = with(LocalDensity.current) { 48.dp.toPx() }
+    LaunchedEffect(width) {
+        if (width == 0) return@LaunchedEffect
+        var last = 0L
+        while (true) {
+            withFrameNanos { n ->
+                if (last != 0L) offset.floatValue = (offset.floatValue + (n - last) / 1_000_000_000f * speed) % width
+                last = n
+            }
+        }
+    }
     Row(
         Modifier.fillMaxWidth().height(26.dp).background(Color.Black.copy(alpha = .5f), CutCornerShape(topEnd = 8.dp)),
         verticalAlignment = Alignment.CenterVertically,
@@ -186,10 +201,14 @@ private fun NewsTicker(live: Live<List<String>>, source: String) {
                 fontFamily = Condensed, letterSpacing = 1.4.sp)
         }
         Spacer(Modifier.width(10.dp))
-        Text(
-            items.joinToString("      •      "), fontSize = 13.sp, color = Ivry.Ivoire, maxLines = 1,
-            modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE, velocity = 45.dp),
-        )
+        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds(), contentAlignment = Alignment.CenterStart) {
+            Row(Modifier.wrapContentWidth(align = Alignment.Start, unbounded = true)
+                .graphicsLayer { translationX = -offset.floatValue }) {
+                Text(text, fontSize = 13.sp, color = Ivry.Ivoire, maxLines = 1, softWrap = false,
+                    modifier = Modifier.onSizeChanged { width = it.width })
+                Text(text, fontSize = 13.sp, color = Ivry.Ivoire, maxLines = 1, softWrap = false)
+            }
+        }
     }
 }
 

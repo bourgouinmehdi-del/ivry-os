@@ -73,6 +73,8 @@ fun IvryRoot(vm: MainViewModel) {
     val idle by vm.engine.idle.collectAsStateWithLifecycle()
     val weather by vm.engine.weatherNow.collectAsStateWithLifecycle()
     val sky = rememberSky(weather.value)
+    val rer by vm.engine.rer.collectAsStateWithLifecycle()
+    val trainTimes = remember(rer.value) { rer.value?.departures?.map { it.expectedAt } ?: emptyList() }
     val base = remember(prefs.theme, prefs.darkBoost, prefs.glass) { paletteFor(prefs.theme, prefs.darkBoost, prefs.glass) }
     val palette = if (idle && prefs.antiBurnIn) base.dimmed() else base
     val perf = prefs.performance || idle
@@ -104,7 +106,7 @@ fun IvryRoot(vm: MainViewModel) {
             LocalTextStyle provides TextStyle(fontFamily = Bricolage),
         ) {
             Box(Modifier.fillMaxSize().background(palette.bg)) {
-                CityScene(sky, Modifier.fillMaxSize(), animate = !prefs.performance, slow = idle)
+                CityScene(sky, Modifier.fillMaxSize(), animate = !prefs.performance, slow = idle, trainTimes = trainTimes)
                 Box(Modifier.fillMaxSize().offset { shift }) {
                     if (!booted) Splash(skip = prefs.performance) { booted = true }
                     else MainShell(vm, prefs)
