@@ -131,7 +131,7 @@ private class Geo(val w: Float, val h: Float) {
 private fun rememberSceneClock(enabled: Boolean, slow: Boolean): State<Float> {
     val state = remember { mutableFloatStateOf((System.currentTimeMillis() % 3_600_000L) / 1000f) }
     LaunchedEffect(enabled, slow) {
-        val step = if (slow) 125L else 50L
+        val step = 33L
         if (!enabled) return@LaunchedEffect
         var last = 0L
         while (true) {
@@ -221,29 +221,57 @@ fun CityScene(sky: SkyState, modifier: Modifier = Modifier, animate: Boolean = t
             val clouds = sky.cloud / 100f
             val night = sky.night
 
-            // RER C à deux niveaux sur la voie des quais : un passage par minute
-            val ph = (t % 60f) / 20f
+            // RER C : rame à deux niveaux (4 voitures), un passage par minute
+            val ph = (t % 60f) / 22f
             if (ph < 1f) {
-                val len = g.w * .27f
-                val hh = g.u * .11f
+                val n = 4
+                val len = g.w * .34f
+                val car = len / n
+                val hh = g.u * .12f
+                val deck = g.base + g.u * .01f
+                val y = deck - hh
                 val x = g.w - ph * (g.w + len)
-                val y = g.base - g.u * .10f
-                val car = len / 3f
-                val body = lerp(Color(0xFF2E3438), Color(0xFFD6DADC), sky.daylight)
-                val lit = lerp(Color(0xFF3A454B), Ivry.Jaune, night * .9f)
-                for (c in 0 until 3) {
+                val body = lerp(Color(0xFF3A4046), Color(0xFFE9EBEC), .25f + .75f * sky.daylight)
+                val band = Color(0xFF1F2D4A)
+                val lit = lerp(Color(0xFF55606A), Color(0xFFF2D47A), night)
+                val steelC = lerp(Color(0xFF1A1F22), Color(0xFF8A9296), sky.daylight)
+                for (c in 0 until n) {
                     val cx = x + c * car
-                    drawRect(body, Offset(cx + 1f, y), Size(car - 3f, hh))
-                    drawRect(Color(0xFF1B3A6B), Offset(cx + 1f, y + hh * .80f), Size(car - 3f, hh * .12f))
+                    when (c) {
+                        0 -> drawPath(Path().apply {
+                            moveTo(cx + car * .12f, y); lineTo(cx + car - 2f, y); lineTo(cx + car - 2f, y + hh)
+                            lineTo(cx, y + hh); lineTo(cx, y + hh * .45f); close()
+                        }, body)
+                        n - 1 -> drawPath(Path().apply {
+                            moveTo(cx + 1f, y); lineTo(cx + car * .88f, y); lineTo(cx + car, y + hh * .45f)
+                            lineTo(cx + car, y + hh); lineTo(cx + 1f, y + hh); close()
+                        }, body)
+                        else -> drawRect(body, Offset(cx + 1f, y), Size(car - 3f, hh))
+                    }
                     for (row in 0..1) {
-                        var wx = cx + car * .06f
-                        while (wx < cx + car - car * .1f) {
-                            drawRect(lit, Offset(wx, y + hh * (.14f + row * .32f)), Size(car * .07f, hh * .2f))
-                            wx += car * .1f
+                        val by = y + hh * (.12f + row * .34f)
+                        drawRect(band, Offset(cx + car * .14f, by), Size(car * .72f, hh * .24f))
+                        var wx = cx + car * .17f
+                        while (wx < cx + car * .82f) {
+                            drawRect(lit, Offset(wx, by + hh * .04f), Size(car * .055f, hh * .16f))
+                            wx += car * .08f
                         }
                     }
+                    for (d in listOf(.09f, .87f)) drawRect(band, Offset(cx + car * d, y + hh * .36f), Size(car * .045f, hh * .5f))
+                    drawRect(Color(0xFFC8102E), Offset(cx + 1f, y + hh * .86f), Size(car - 3f, hh * .05f))
                 }
-                drawCircle(Ivry.Ivoire.copy(alpha = .9f), hh * .09f, Offset(x + 3f, y + hh * .62f))
+                // Pare-brise, phares et pantographe
+                drawPath(Path().apply {
+                    moveTo(x + car * .12f, y + hh * .05f); lineTo(x + car * .2f, y + hh * .05f)
+                    lineTo(x + car * .06f, y + hh * .4f); lineTo(x + car * .01f, y + hh * .4f); close()
+                }, band)
+                drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .03f, y + hh * .72f))
+                drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .08f, y + hh * .72f))
+                val pxx = x + car * 1.5f
+                val top = deck - g.u * .17f
+                drawLine(steelC, Offset(pxx - car * .08f, y), Offset(pxx, top), 1.5f)
+                drawLine(steelC, Offset(pxx + car * .08f, y), Offset(pxx, top), 1.5f)
+                drawLine(steelC, Offset(pxx - car * .07f, top), Offset(pxx + car * .07f, top), 2f)
                 drawLine(Ivry.Jaune.copy(alpha = .12f + .2f * night), Offset(x, g.base + 10f), Offset(x + len, g.base + 10f), 3f)
             }
 
@@ -415,6 +443,17 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     drawRect(lerp(ground, Ivry.Beton, .14f + .10f * day), Offset(0f, ty + u * .11f), Size(w, u * .03f))
     var px = 0f
     while (px < w) { drawRect(lerp(ground, Ivry.Beton, .10f + .08f * day), Offset(px, ty + u * .14f), Size(u * .02f, u * .06f)); px += w * .05f }
+    // Caténaire : poteaux et fil au-dessus de la voie
+    val deck = base + u * .01f
+    val wire = deck - u * .17f
+    val mast = lerp(ground, Ivry.Beton, .22f + .15f * day)
+    var mx = w * .02f
+    while (mx < w) {
+        drawLine(mast, Offset(mx, deck), Offset(mx, wire - u * .03f), 2f)
+        drawLine(mast, Offset(mx, wire - u * .02f), Offset(mx + w * .015f, wire - u * .02f), 1.5f)
+        mx += w * .09f
+    }
+    drawLine(mast, Offset(0f, wire), Offset(w, wire), 1.2f)
 
     // Arbres des quais
     for (i in 0 until 14) drawCircle(lerp(ground, nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))

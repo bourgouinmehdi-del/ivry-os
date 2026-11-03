@@ -104,18 +104,19 @@ fun HomeScreen(
         LazyRow(Modifier.fillMaxWidth().weight(.20f), horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)) {
             item(key = "canal") {
-                AppCard("myCANAL", "CANAL+", canal, AppsRepository.CANAL_STORE, Ivry.Ivoire,
-                    Modifier.fillMaxHeight().aspectRatio(2.3f), firstFocus, vm)
+                AppTile(canal, false, Modifier.fillMaxHeight().aspectRatio(1.35f), fallbackName = "myCANAL",
+                    accent = Ivry.Ivoire, focusRequester = firstFocus) {
+                    canal?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.CANAL_STORE)
+                }
             }
             item(key = "youtube") {
-                AppCard("YouTube", "Vidéo", youtube, AppsRepository.YOUTUBE_TV, Color(0xFFFF0033),
-                    Modifier.fillMaxHeight().aspectRatio(2.3f), null, vm)
-            }
-            item(key = "cinema") {
-                CinemaCard(videoCount, Modifier.fillMaxHeight().aspectRatio(1.5f)) { onSection(Section.CINEMA) }
+                AppTile(youtube, false, Modifier.fillMaxHeight().aspectRatio(1.35f), fallbackName = "YouTube",
+                    accent = Color(0xFFFF0033)) {
+                    youtube?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.YOUTUBE_TV)
+                }
             }
             items(others, key = { it.pkg }) { app ->
-                AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(1.25f)) {
+                AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(1.35f)) {
                     vm.requestLaunch(app.pkg)
                 }
             }
@@ -213,31 +214,30 @@ private fun TransitPanel(
                 )
                 deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 12.sp, color = p.textDim)
                 else -> {
-                    // Prochain départ en grand, avec le moment où partir selon le temps de marche
+                    // Prochain départ en grand, puis les suivants sur une ligne
                     val first = deps.first()
                     val m = ((first.expectedAt - now) / 60_000L).toInt()
                     val (leave, leaveColor) = when {
-                        m < walk -> "Trop juste à pied" to p.textDim
+                        m < walk -> "Trop juste" to p.textDim
                         m - walk <= 2 -> "Pars maintenant" to p.warn
                         else -> "Pars dans ${m - walk} min" to p.nature
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(first.destination, fontSize = 10.sp, lineHeight = 12.sp, color = p.textDim, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis)
-                            Text(leave, fontSize = 10.5.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = leaveColor, maxLines = 1)
-                        }
-                        Text(minutesLabel(first, now), fontSize = 27.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold,
+                    val sameDest = deps.map { it.destination }.distinct().size == 1
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(minutesLabel(first, now), fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold,
                             color = if (leaveColor == p.warn) p.warn else p.text)
+                        Spacer(Modifier.width(8.dp))
+                        Text(leave, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = leaveColor,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 5.dp))
                     }
-                    deps.drop(1).forEach { d ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(d.destination, fontSize = 10.sp, color = p.textDim, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Text(minutesLabel(d, now), fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.ExtraBold,
-                                color = p.text.copy(alpha = .85f))
-                        }
-                    }
+                    if (!sameDest) Text("vers ${shortDest(first.destination)}", fontSize = 11.sp, lineHeight = 13.sp,
+                        color = p.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val rest = deps.drop(1)
+                    if (rest.isNotEmpty()) Text(
+                        "Puis " + rest.joinToString(" · ") { (if (sameDest) "" else shortDest(it.destination) + " ") + minutesLabel(it, now) },
+                        fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = p.text.copy(alpha = .8f),
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -397,4 +397,15 @@ private fun AlertsRow(alerts: List<String>, modifier: Modifier) {
             }
         }
     }
+}
+
+/** « Pont de Rungis Aéroport d'Orly » → « Pont de Rungis », « La Courneuve-8-Mai-1945 » → « La Courneuve ». */
+private fun shortDest(d: String): String {
+    val sb = StringBuilder()
+    for (w in d.replace('-', ' ').split(' ').filter { it.isNotBlank() }) {
+        if (sb.length >= 9) break
+        if (sb.isNotEmpty()) sb.append(' ')
+        sb.append(w)
+    }
+    return sb.toString()
 }

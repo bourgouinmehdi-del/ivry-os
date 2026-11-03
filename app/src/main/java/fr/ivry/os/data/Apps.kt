@@ -42,7 +42,7 @@ object AppsRepository {
             val ai = ri.activityInfo
             // Tuiles uniformes : on garde l'icône officielle, pas la bannière (recadrages disparates)
             val banner: ImageBitmap? = null
-            val icon = runCatching { ai.loadIcon(pm).toBitmap(128, 128).asImageBitmap() }.getOrNull()
+            val icon = runCatching { ai.loadIcon(pm).toBitmap(192, 192).asImageBitmap() }.getOrNull()
             val video = ai.applicationInfo.category == ApplicationInfo.CATEGORY_VIDEO ||
                 videoHints.any { ai.packageName.contains(it, ignoreCase = true) }
             AppEntry(ai.packageName, ri.loadLabel(pm).toString(), banner, icon, video)

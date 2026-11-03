@@ -155,23 +155,19 @@ fun ActionButton(
     }
 }
 
-/** Indication de fraîcheur : chaque donnée périmée ou en échec est signalée. */
+/** Signale seulement les problèmes (donnée périmée ou en échec) ; rien quand tout va bien. */
 @Composable
 fun Freshness(live: Live<*>, now: Long, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
-    val (text, warn) = when {
-        live.value == null && live.error != null -> "Indisponible pour le moment" to true
-        live.value == null -> "Chargement…" to false
-        live.isStale(now) -> "PÉRIMÉ · donnée de ${hhmm(live.fetchedAt)}" to true
-        live.error != null -> "Échec actualisation · valeur de ${hhmm(live.fetchedAt)}" to true
-        else -> "Actualisé ${ago(now - live.fetchedAt)}" to false
+    val text = when {
+        live.value == null && live.error != null -> "Indisponible pour le moment"
+        live.value != null && live.isStale(now) -> "Donnée ancienne · ${hhmm(live.fetchedAt)}"
+        else -> return
     }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (warn) {
-            Icon(Icons.Default.Warning, null, tint = p.warn, modifier = Modifier.size(11.dp))
-            Spacer(Modifier.width(4.dp))
-        }
-        Text(text, fontSize = 9.5.sp, color = if (warn) p.warn else p.textDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Icon(Icons.Default.Warning, null, tint = p.warn, modifier = Modifier.size(11.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, fontSize = 9.5.sp, color = p.warn, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -186,20 +182,32 @@ fun ago(d: Long): String = when {
 }
 
 @Composable
-fun AppTile(app: AppEntry, favorite: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun AppTile(
+    app: AppEntry?,
+    favorite: Boolean,
+    modifier: Modifier = Modifier,
+    fallbackName: String = "",
+    accent: Color? = null,
+    focusRequester: FocusRequester? = null,
+    onClick: () -> Unit,
+) {
     val p = LocalPalette.current
-    Plate(modifier, shape = CutCornerShape(topEnd = 10.dp), onClick = onClick) { f ->
-        Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = .25f)),
-                contentAlignment = Alignment.Center) {
-                if (app.icon != null) Image(bitmap = app.icon, contentDescription = null, modifier = Modifier.fillMaxSize().padding(3.dp))
-                else Text(app.label.take(1), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
+    val name = app?.label ?: fallbackName
+    Plate(modifier, shape = CutCornerShape(topEnd = 10.dp), focusRequester = focusRequester, onClick = onClick) { f ->
+        Box(Modifier.fillMaxHeight(.62f).aspectRatio(1f).align(Alignment.Center).clip(RoundedCornerShape(12.dp))) {
+            if (app?.icon != null) Image(bitmap = app.icon, contentDescription = name, modifier = Modifier.fillMaxSize())
+            else Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .3f)), contentAlignment = Alignment.Center) {
+                Text(name.take(1), fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
             }
-            Spacer(Modifier.height(6.dp))
-            Text(app.label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (f) p.focus else p.text, maxLines = 1,
-                textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis)
         }
+        if (accent != null) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(accent))
+        if (f) Text(
+            if (app == null) "$name · installer" else name,
+            fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, color = Ivry.Ivoire, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = .6f))
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+        )
         if (favorite) Icon(Icons.Default.Star, null, tint = p.focus,
             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp))
     }
