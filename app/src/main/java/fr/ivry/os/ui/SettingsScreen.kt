@@ -114,6 +114,12 @@ fun SettingsScreen(vm: MainViewModel, prefs: Prefs) {
         TextRow("RER C · ligne (trafic)", prefs.rerLineRef, "Aucune") {
             editing = TextSetting("RER C · LineRef", prefs.rerLineRef, Keys.rerLine)
         }
+        TextRow("Fil d'actualité (adresse RSS)", prefs.newsUrl, "franceinfo") {
+            editing = TextSetting("Fil d'actualité (adresse RSS)", prefs.newsUrl, Keys.newsUrl)
+        }
+        TextRow("Agenda (adresse secrète iCal)", if (prefs.icalUrl.isBlank()) "" else "Configuré", "À renseigner") {
+            editing = TextSetting("Agenda (adresse secrète iCal)", prefs.icalUrl, Keys.icalUrl)
+        }
         TextRow("Vélib' · code station", prefs.velibCode, "À renseigner") {
             editing = TextSetting("Vélib' · code station", prefs.velibCode, Keys.velibCode)
         }

@@ -44,6 +44,8 @@ data class Prefs(
     val rerLineRef: String = "STIF:Line::C01727:",
     val rerFilter: String = RER_NORD,
     val velibCode: String = "42021",
+    val newsUrl: String = News.DEFAULT_URL,
+    val icalUrl: String = "",
     val metroWalk: Int = 5,
     val rerWalk: Int = 8,
     val favorites: List<String> = emptyList(),
@@ -67,6 +69,8 @@ object Keys {
     val rerLine = stringPreferencesKey("rer_line")
     val rerFilter = stringPreferencesKey("rer_filter")
     val velibCode = stringPreferencesKey("velib_code")
+    val newsUrl = stringPreferencesKey("news_url")
+    val icalUrl = stringPreferencesKey("ical_url")
     val metroWalk = intPreferencesKey("metro_walk")
     val rerWalk = intPreferencesKey("rer_walk")
     val favorites = stringPreferencesKey("favorites")
@@ -141,6 +145,8 @@ class SettingsRepo(context: Context) {
         rerLineRef = this[Keys.rerLine] ?: "STIF:Line::C01727:",
         rerFilter = this[Keys.rerFilter] ?: RER_NORD,
         velibCode = this[Keys.velibCode] ?: "42021",
+        newsUrl = this[Keys.newsUrl]?.takeIf { it.isNotBlank() } ?: News.DEFAULT_URL,
+        icalUrl = this[Keys.icalUrl] ?: "",
         metroWalk = this[Keys.metroWalk] ?: 5,
         rerWalk = this[Keys.rerWalk] ?: 8,
         favorites = decodeList(this[Keys.favorites]),

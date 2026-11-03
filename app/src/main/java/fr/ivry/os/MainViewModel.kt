@@ -106,6 +106,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "metroStop" to Keys.metroStop, "metroLine" to Keys.metroLine, "metroFilter" to Keys.metroFilter,
             "rerStop" to Keys.rerStop, "rerLine" to Keys.rerLine, "rerFilter" to Keys.rerFilter,
             "velibCode" to Keys.velibCode,
+            "newsUrl" to Keys.newsUrl, "icalUrl" to Keys.icalUrl,
         )
         viewModelScope.launch {
             map.forEach { (name, key) -> ex.getString(name)?.let { settings.set(key, it.trim()) } }

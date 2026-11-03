@@ -37,6 +37,8 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
     val metro = MutableStateFlow(Live<Transit>(staleAfterMs = 3 * MIN))
     val rer = MutableStateFlow(Live<Transit>(staleAfterMs = 3 * MIN))
     val velib = MutableStateFlow(Live<Velib>(staleAfterMs = 4 * MIN))
+    val news = MutableStateFlow(Live<List<String>>(staleAfterMs = 90 * MIN))
+    val agenda = MutableStateFlow(Live<List<AgendaEvent>>(staleAfterMs = 6 * 60 * MIN))
     val online = MutableStateFlow(true)
     val idle = MutableStateFlow(false)
 
@@ -61,6 +63,14 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
             Sources.parseTransit(t, p.rerFilter)
         }
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
+        loop("news", 10 * MIN, news, { p ->
+            News.toJson(News.parse(Http.get(p.newsUrl, mapOf("Accept" to "application/rss+xml, application/xml, text/xml"))))
+        }) { t, _ -> News.fromJson(t) }
+        loop("agenda", 15 * MIN, agenda, { p ->
+            if (p.icalUrl.isBlank()) throw IllegalStateException("Agenda non configuré")
+            val url = p.icalUrl.trim().replaceFirst("webcal://", "https://")
+            Agenda.toJson(Agenda.today(Http.get(url, mapOf("Accept" to "text/calendar"))))
+        }) { t, _ -> Agenda.fromJson(t) }
 
         scope.launch {
             while (isActive) {
@@ -72,7 +82,7 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
         scope.launch {
             settings.prefs
                 .map { listOf(it.proxyUrl, it.proxyToken, it.metroStopRef, it.metroLineRef, it.metroFilter,
-                    it.rerStopRef, it.rerLineRef, it.rerFilter, it.velibCode) }
+                    it.rerStopRef, it.rerLineRef, it.rerFilter, it.velibCode, it.newsUrl, it.icalUrl) }
                 .distinctUntilChanged().drop(1)
                 .collect { refreshNow() }
         }

@@ -1,6 +1,8 @@
 package fr.ivry.os.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,6 +55,8 @@ fun HomeScreen(
     val rer by e.rer.collectAsStateWithLifecycle()
     val velib by e.velib.collectAsStateWithLifecycle()
     val online by e.online.collectAsStateWithLifecycle()
+    val news by e.news.collectAsStateWithLifecycle()
+    val agenda by e.agenda.collectAsStateWithLifecycle()
 
     val canal = remember(apps) { AppsRepository.findCanal(apps) }
     val youtube = remember(apps) { AppsRepository.findYoutube(apps) }
@@ -87,7 +91,7 @@ fun HomeScreen(
         }
 
         // La ville, dégagée, entre l'en-tête et les modules
-        Spacer(Modifier.weight(.42f))
+        Spacer(Modifier.weight(.36f))
 
         // ZONE 2 — IVRY LIVE, plaques de verre posées sur la Seine
         Row(Modifier.fillMaxWidth().weight(.34f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -100,27 +104,92 @@ fun HomeScreen(
         }
         Spacer(Modifier.height(10.dp))
 
-        // ZONE 3 — une seule rangée : myCANAL, YouTube, Cinéma, puis le reste
-        LazyRow(Modifier.fillMaxWidth().weight(.20f), horizontalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)) {
-            item(key = "canal") {
-                AppTile(canal, false, Modifier.fillMaxHeight().aspectRatio(1.35f), fallbackName = "myCANAL",
-                    accent = Ivry.Ivoire, focusRequester = firstFocus) {
-                    canal?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.CANAL_STORE)
+        // ZONE 3 — agenda du jour, puis les applis
+        Row(Modifier.fillMaxWidth().weight(.20f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AgendaCard(agenda, prefs.icalUrl.isNotBlank(), Modifier.weight(1.15f))
+            LazyRow(Modifier.weight(1.85f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)) {
+                item(key = "canal") {
+                    AppTile(canal, false, Modifier.fillMaxHeight().aspectRatio(1.2f), fallbackName = "myCANAL",
+                        accent = Ivry.Ivoire, focusRequester = firstFocus) {
+                        canal?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.CANAL_STORE)
+                    }
                 }
-            }
-            item(key = "youtube") {
-                AppTile(youtube, false, Modifier.fillMaxHeight().aspectRatio(1.35f), fallbackName = "YouTube",
-                    accent = Color(0xFFFF0033)) {
-                    youtube?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.YOUTUBE_TV)
+                item(key = "youtube") {
+                    AppTile(youtube, false, Modifier.fillMaxHeight().aspectRatio(1.2f), fallbackName = "YouTube",
+                        accent = Color(0xFFFF0033)) {
+                        youtube?.let { vm.requestLaunch(it.pkg) } ?: vm.openStore(AppsRepository.YOUTUBE_TV)
+                    }
                 }
-            }
-            items(others, key = { it.pkg }) { app ->
-                AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(1.35f)) {
-                    vm.requestLaunch(app.pkg)
+                items(others, key = { it.pkg }) { app ->
+                    AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(1.2f)) {
+                        vm.requestLaunch(app.pkg)
+                    }
                 }
             }
         }
+
+        // Fil d'actualité défilant
+        Spacer(Modifier.height(8.dp))
+        NewsTicker(news, News.sourceName(prefs.newsUrl))
+    }
+}
+
+/** Agenda du jour : événements à venir ou en cours, tirés de l'adresse iCal. */
+@Composable
+private fun AgendaCard(live: Live<List<AgendaEvent>>, configured: Boolean, modifier: Modifier) {
+    val p = LocalPalette.current
+    val now = rememberTick(60_000)
+    Plate(modifier.fillMaxHeight(), shape = CutCornerShape(topStart = 18.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            PanelLabel("Agenda · aujourd'hui", p.accent)
+            Spacer(Modifier.height(4.dp))
+            val all = live.value
+            val evs = all?.filter { it.allDay || it.end > now }
+            when {
+                !configured -> Text("Ajoute ton agenda dans Paramètres › Sources.", fontSize = 11.sp, lineHeight = 14.sp, color = p.textDim)
+                evs == null -> Text(if (live.error != null) "Agenda indisponible pour le moment" else "Chargement…",
+                    fontSize = 11.sp, color = p.textDim)
+                evs.isEmpty() -> Text(if (all.isEmpty()) "Rien de prévu aujourd'hui" else "Plus rien de prévu aujourd'hui",
+                    fontSize = 12.sp, color = p.textDim)
+                else -> {
+                    val shown = if (evs.size > 3) evs.take(2) else evs
+                    shown.forEach { ev ->
+                        val ongoing = !ev.allDay && ev.start <= now
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (ev.allDay) "Journée" else hhmm(ev.start), fontSize = 12.sp, lineHeight = 15.sp,
+                                fontWeight = FontWeight.ExtraBold, color = if (ongoing) p.focus else p.text,
+                                modifier = Modifier.width(54.dp))
+                            Text(ev.title, fontSize = 12.sp, lineHeight = 15.sp, color = p.text, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (evs.size > 3) Text("+ ${evs.size - 2} autres", fontSize = 11.sp, lineHeight = 14.sp, color = p.textDim)
+                }
+            }
+        }
+    }
+}
+
+/** Fil d'actualité défilant, sur toute la largeur. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NewsTicker(live: Live<List<String>>, source: String) {
+    val items = live.value
+    if (items.isNullOrEmpty()) return
+    Row(
+        Modifier.fillMaxWidth().height(26.dp).background(Color.Black.copy(alpha = .5f), CutCornerShape(topEnd = 8.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.fillMaxHeight().background(Ivry.Orange).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+            Text(source.uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Ivry.Asphalte,
+                fontFamily = Condensed, letterSpacing = 1.4.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            items.joinToString("      •      "), fontSize = 13.sp, color = Ivry.Ivoire, maxLines = 1,
+            modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE, velocity = 45.dp),
+        )
     }
 }
 
