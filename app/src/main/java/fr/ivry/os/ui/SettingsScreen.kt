@@ -114,12 +114,6 @@ fun SettingsScreen(vm: MainViewModel, prefs: Prefs) {
         TextRow("RER C · ligne (trafic)", prefs.rerLineRef, "Aucune") {
             editing = TextSetting("RER C · LineRef", prefs.rerLineRef, Keys.rerLine)
         }
-        StepRow("Temps de marche jusqu'au métro 7", "${prefs.metroWalk} min",
-            { vm.set(Keys.metroWalk, (prefs.metroWalk - 1).coerceAtLeast(0)) },
-            { vm.set(Keys.metroWalk, (prefs.metroWalk + 1).coerceAtMost(30)) })
-        StepRow("Temps de marche jusqu'au RER C", "${prefs.rerWalk} min",
-            { vm.set(Keys.rerWalk, (prefs.rerWalk - 1).coerceAtLeast(0)) },
-            { vm.set(Keys.rerWalk, (prefs.rerWalk + 1).coerceAtMost(30)) })
         TextRow("Vélib' · code station", prefs.velibCode, "À renseigner") {
             editing = TextSetting("Vélib' · code station", prefs.velibCode, Keys.velibCode)
         }

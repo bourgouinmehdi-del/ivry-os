@@ -216,20 +216,9 @@ private fun TransitPanel(
                 else -> {
                     // Prochain départ en grand, puis les suivants sur une ligne
                     val first = deps.first()
-                    val m = ((first.expectedAt - now) / 60_000L).toInt()
-                    val (leave, leaveColor) = when {
-                        m < walk -> "Trop juste" to p.textDim
-                        m - walk <= 2 -> "Pars maintenant" to p.warn
-                        else -> "Pars dans ${m - walk} min" to p.nature
-                    }
                     val sameDest = deps.map { it.destination }.distinct().size == 1
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(minutesLabel(first, now), fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold,
-                            color = if (leaveColor == p.warn) p.warn else p.text)
-                        Spacer(Modifier.width(8.dp))
-                        Text(leave, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = leaveColor,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 5.dp))
-                    }
+                    Text(minutesLabel(first, now), fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold,
+                        color = p.text)
                     if (!sameDest) Text("vers ${shortDest(first.destination)}", fontSize = 11.sp, lineHeight = 13.sp,
                         color = p.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val rest = deps.drop(1)
