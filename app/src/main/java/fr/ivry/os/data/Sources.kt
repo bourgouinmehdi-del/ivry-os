@@ -89,10 +89,33 @@ object Sources {
     // ---------- Transports (PRIM via proxy) ----------
 
     fun stopMonitoringUrl(proxy: String, ref: String) =
-        proxy.trimEnd('/') + "/stop-monitoring?MonitoringRef=" + enc(ref)
+        proxy.trimEnd('/') + "/stop-monitoring?MonitoringRef=" + enc(normalizeStop(ref))
 
     fun generalMessageUrl(proxy: String, line: String) =
-        proxy.trimEnd('/') + "/general-message?LineRef=" + enc(line)
+        proxy.trimEnd('/') + "/general-message?LineRef=" + enc(normalizeLine(line))
+
+    /**
+     * Accepte l'identifiant tel qu'il est copié depuis les données IDFM et le convertit au format SIRI :
+     * « IDFM:monomodalStopPlace:43135 » ou « 43135 » → STIF:StopArea:SP:43135:
+     * « IDFM:463158 » (quai)                        → STIF:StopPoint:Q:463158:
+     * Un identifiant déjà au format STIF est gardé tel quel.
+     */
+    fun normalizeStop(raw: String): String {
+        val r = raw.trim()
+        if (r.startsWith("STIF:")) return if (r.endsWith(":")) r else "$r:"
+        val digits = r.substringAfterLast(':').filter { it.isDigit() }
+        if (digits.isEmpty()) return r
+        return if (r.contains("monomodalStopPlace", true) || r.contains("StopArea", true) || !r.contains(':'))
+            "STIF:StopArea:SP:$digits:" else "STIF:StopPoint:Q:$digits:"
+    }
+
+    /** « C01377 », « IDFM:C01377 » ou « line:IDFM:C01377 » → STIF:Line::C01377: */
+    fun normalizeLine(raw: String): String {
+        val r = raw.trim()
+        if (r.startsWith("STIF:")) return r
+        val code = Regex("C\\d{5}").find(r)?.value ?: return r
+        return "STIF:Line::$code:"
+    }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
