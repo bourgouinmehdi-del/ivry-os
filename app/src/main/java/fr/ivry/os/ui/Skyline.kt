@@ -227,7 +227,7 @@ fun CityScene(
             val clouds = sky.cloud / 100f
             val night = sky.night
 
-            // RER C : arrêts en gare aux horaires réels, sinon simple passage toutes les 90 s
+            // RER C : un arrêt en gare toutes les 90 s, avec voyageurs
             drawRer(g, sky, t, trainTimes)
 
             // Reflets de l'astre qui ondulent
@@ -454,7 +454,7 @@ private fun h32(a: Long, b: Int = 0): Int {
     return (x and 0x7fffffffL).toInt()
 }
 
-private fun DrawScope.drawRer(g: Geo, sky: SkyState, t: Float, times: List<Long>) {
+private fun DrawScope.drawRer(g: Geo, sky: SkyState, t: Float, @Suppress("UNUSED_PARAMETER") realTimes: List<Long>) {
     val night = sky.night
     val n = 4
     val len = g.w * .40f
@@ -464,12 +464,10 @@ private fun DrawScope.drawRer(g: Geo, sky: SkyState, t: Float, times: List<Long>
     val xStop = g.w * (STATION_X0 + .03f)
     val now = System.currentTimeMillis()
 
-    if (times.isEmpty()) {
-        // Pas d'horaires : simple passage sans arrêt
-        val ph = (t % 90f) / 24f
-        if (ph < 1f) drawTrain(g.w - ph * (g.w + len), deck, hh, car, n, sky, doorsOpen = false)
-        return
-    }
+    // Un arrêt en gare toutes les 90 s (rythme fixe, indépendant des vrais horaires)
+    val cycle = 90_000L
+    val k = now / cycle
+    val times = listOf((k - 1) * cycle + 12_000L, k * cycle + 12_000L)
     for (tt in times) {
         val s = (now - tt) / 1000f
         if (s < -12f || s > 26f) continue
