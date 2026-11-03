@@ -188,27 +188,20 @@ fun ago(d: Long): String = when {
 @Composable
 fun AppTile(app: AppEntry, favorite: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val p = LocalPalette.current
-    Plate(modifier, onClick = onClick) { f ->
-        if (app.banner != null) {
-            Image(bitmap = app.banner, contentDescription = app.label,
-                modifier = Modifier.fillMaxSize().padding(5.dp).clip(RoundedCornerShape(3.dp)),
-                contentScale = ContentScale.Crop)
-        } else {
-            Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                app.icon?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.size(34.dp)) }
-                Spacer(Modifier.height(4.dp))
-                Text(app.label, fontSize = 11.sp, color = p.text, maxLines = 2, textAlign = TextAlign.Center,
-                    overflow = TextOverflow.Ellipsis)
+    Plate(modifier, shape = CutCornerShape(topEnd = 10.dp), onClick = onClick) { f ->
+        Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = .25f)),
+                contentAlignment = Alignment.Center) {
+                if (app.icon != null) Image(bitmap = app.icon, contentDescription = null, modifier = Modifier.fillMaxSize().padding(3.dp))
+                else Text(app.label.take(1), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
             }
+            Spacer(Modifier.height(6.dp))
+            Text(app.label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (f) p.focus else p.text, maxLines = 1,
+                textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis)
         }
         if (favorite) Icon(Icons.Default.Star, null, tint = p.focus,
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(14.dp))
-        if (f && app.banner != null) Text(
-            app.label, fontSize = 10.sp, color = Ivry.Ivoire, maxLines = 1,
-            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                .background(Color.Black.copy(alpha = .65f)).padding(horizontal = 6.dp, vertical = 2.dp),
-        )
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp))
     }
 }
 

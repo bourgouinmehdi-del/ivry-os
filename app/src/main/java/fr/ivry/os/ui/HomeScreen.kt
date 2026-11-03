@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -84,44 +86,37 @@ fun HomeScreen(
             }
         }
 
-        // La ville reste visible entre l'en-tête et les modules
-        Spacer(Modifier.weight(.25f))
+        // La ville, dégagée, entre l'en-tête et les modules
+        Spacer(Modifier.weight(.42f))
 
         // ZONE 2 — IVRY LIVE, plaques de verre posées sur la Seine
-        Row(Modifier.fillMaxWidth().weight(.40f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().weight(.34f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WeatherPanel(weather, forecast, Modifier.weight(1.3f)) { onDetail(Detail.WEATHER) }
-            TransitPanel("7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve – 8 Mai 1945",
+            TransitPanel("7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve",
                 metro, prefs.metroWalk, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
-            TransitPanel("C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris et nord de la ligne",
+            TransitPanel("C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris, nord",
                 rer, prefs.rerWalk, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
             VelibPanel(velib, Modifier.weight(.9f)) { onDetail(Detail.VELIB) }
         }
         Spacer(Modifier.height(10.dp))
 
-        // ZONE 3 — applications prioritaires
-        Row(Modifier.fillMaxWidth().weight(.18f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BigAppCard("myCANAL", "CANAL+", canal, AppsRepository.CANAL_STORE, Color(0xFF0B0B0B),
-                CutCornerShape(topStart = 26.dp), Modifier.weight(1f), firstFocus, vm)
-            BigAppCard("YouTube", "Vidéo", youtube, AppsRepository.YOUTUBE_TV, Color(0xFF1E1E1E),
-                CutCornerShape(bottomEnd = 26.dp), Modifier.weight(1f), null, vm)
-            CinemaCard(videoCount, Modifier.weight(.55f)) { onSection(Section.CINEMA) }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        // « Le reste »
-        PanelLabel("Le reste", p.nature)
-        Spacer(Modifier.height(5.dp))
-        Box(Modifier.fillMaxWidth().weight(.16f)) {
-            if (others.isEmpty()) {
-                Text("Aucune autre application détectée.", fontSize = 12.sp, color = p.textDim)
-            } else {
-                LazyRow(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(vertical = 3.dp)) {
-                    items(others, key = { it.pkg }) { app ->
-                        AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(16f / 9f)) {
-                            vm.requestLaunch(app.pkg)
-                        }
-                    }
+        // ZONE 3 — une seule rangée : myCANAL, YouTube, Cinéma, puis le reste
+        LazyRow(Modifier.fillMaxWidth().weight(.20f), horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)) {
+            item(key = "canal") {
+                AppCard("myCANAL", "CANAL+", canal, AppsRepository.CANAL_STORE, Ivry.Ivoire,
+                    Modifier.fillMaxHeight().aspectRatio(2.3f), firstFocus, vm)
+            }
+            item(key = "youtube") {
+                AppCard("YouTube", "Vidéo", youtube, AppsRepository.YOUTUBE_TV, Color(0xFFFF0033),
+                    Modifier.fillMaxHeight().aspectRatio(2.3f), null, vm)
+            }
+            item(key = "cinema") {
+                CinemaCard(videoCount, Modifier.fillMaxHeight().aspectRatio(1.5f)) { onSection(Section.CINEMA) }
+            }
+            items(others, key = { it.pkg }) { app ->
+                AppTile(app, app.pkg in prefs.favorites, Modifier.fillMaxHeight().aspectRatio(1.25f)) {
+                    vm.requestLaunch(app.pkg)
                 }
             }
         }
@@ -156,7 +151,7 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
                 Text(weather.error ?: "Chargement…", fontSize = 12.sp, color = p.textDim)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(deg(w.temp), fontSize = 44.sp, lineHeight = 46.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
+                    Text(deg(w.temp), fontSize = 38.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(wmoLabel(w.code), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = p.text, maxLines = 1,
@@ -199,12 +194,11 @@ private fun TransitPanel(
                 LineBadge(code, color, round)
                 Spacer(Modifier.width(8.dp))
                 Column {
-                    Text(title, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
-                        color = p.textDim, fontFamily = Condensed)
+                    Text("$title  $direction", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                        color = p.textDim, fontFamily = Condensed, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(station, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = p.text, maxLines = 1)
                 }
             }
-            Text(direction, fontSize = 10.sp, color = p.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             val t = live.value
             val deps = t?.departures?.filter { it.expectedAt > now - 60_000 }?.take(3)
@@ -257,7 +251,7 @@ private fun TransitPanel(
                     overflow = TextOverflow.Ellipsis, fontWeight = if (warn) FontWeight.Bold else FontWeight.Normal)
                 Spacer(Modifier.height(2.dp))
             }
-            Freshness(live, now, Modifier.padding(end = 14.dp))
+            if (t != null) Freshness(live, now, Modifier.padding(end = 14.dp))
         }
     }
 }
@@ -306,35 +300,36 @@ private fun Count(n: Int, label: String, color: Color, modifier: Modifier) {
 
 // ---------- Applications ----------
 
+/** Carte d'appli prioritaire au style d'IVRY OS : icône officielle, nom, fine barre de couleur. */
 @Composable
-private fun BigAppCard(
-    title: String, subtitle: String, app: AppEntry?, storePkg: String, fallbackBg: Color, shape: Shape,
+private fun AppCard(
+    title: String, subtitle: String, app: AppEntry?, storePkg: String, accent: Color,
     modifier: Modifier, focusRequester: FocusRequester?, vm: MainViewModel,
 ) {
     val p = LocalPalette.current
     Plate(
-        modifier.fillMaxHeight(), shape = shape, focusRequester = focusRequester, background = fallbackBg,
+        modifier, shape = CutCornerShape(topEnd = 18.dp), focusRequester = focusRequester,
         onClick = { if (app != null) vm.requestLaunch(app.pkg) else vm.openStore(storePkg) },
     ) { f ->
-        when {
-            app?.banner != null -> Image(bitmap = app.banner, contentDescription = app.label,
-                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            app?.icon != null -> Image(bitmap = app.icon, contentDescription = app.label,
-                modifier = Modifier.align(Alignment.Center).size(56.dp))
-        }
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .78f)))))
-        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
-            Text(subtitle.uppercase(), fontSize = 10.sp, letterSpacing = 1.6.sp, color = p.accent, fontWeight = FontWeight.Bold,
-                fontFamily = Condensed)
-            Text(title, fontSize = 22.sp, lineHeight = 24.sp, fontWeight = FontWeight.ExtraBold, color = Ivry.Ivoire)
-            Text(
-                when {
-                    app == null -> "Non installée · OK pour l'installer"
-                    f -> "OK pour lancer"
-                    else -> "Lancement direct"
-                },
-                fontSize = 11.sp, color = if (f) p.focus else Ivry.Beton.copy(alpha = .8f),
-            )
+        Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().width(4.dp).background(accent))
+        Row(Modifier.fillMaxSize().padding(start = 16.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = .3f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (app?.icon != null) Image(bitmap = app.icon, contentDescription = title, modifier = Modifier.fillMaxSize().padding(4.dp))
+                else Text(title.take(1), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(subtitle.uppercase(), fontSize = 10.sp, letterSpacing = 1.6.sp, color = p.textDim, fontWeight = FontWeight.Bold,
+                    fontFamily = Condensed)
+                Text(title, fontSize = 22.sp, lineHeight = 24.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
+                Text(
+                    when { app == null -> "OK pour l'installer"; f -> "OK pour lancer"; else -> "Lancement direct" },
+                    fontSize = 11.sp, color = if (f) p.focus else p.textDim,
+                )
+            }
         }
     }
 }

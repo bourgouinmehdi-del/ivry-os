@@ -31,7 +31,7 @@ data class Prefs(
     val dimLevel: Int = 0,          // 0..6 → 0 à 60 %
     val darkBoost: Boolean = false,
     val performance: Boolean = false,
-    val glass: Int = 8,             // 2..9 → opacité du verre
+    val glass: Int = 9,             // 2..9 → opacité du verre
     val proxyUrl: String = "",
     val proxyToken: String = "",
     val metroStopRef: String = "",
@@ -128,7 +128,7 @@ class SettingsRepo(context: Context) {
         dimLevel = this[Keys.dim] ?: 0,
         darkBoost = this[Keys.darkBoost] ?: false,
         performance = this[Keys.performance] ?: false,
-        glass = this[Keys.glass] ?: 8,
+        glass = this[Keys.glass] ?: 9,
         proxyUrl = this[Keys.proxyUrl] ?: "",
         proxyToken = this[Keys.proxyToken] ?: "",
         metroStopRef = this[Keys.metroStop] ?: "",

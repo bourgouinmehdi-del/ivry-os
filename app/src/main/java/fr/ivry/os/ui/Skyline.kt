@@ -122,8 +122,8 @@ private fun SkyState.gradient(): Grad {
 
 /** Géométrie commune aux calques de la scène. */
 private class Geo(val w: Float, val h: Float) {
-    val base = h * .52f
-    val u = h * .36f
+    val base = h * .45f
+    val u = h * .29f
 }
 
 /** Horloge de la scène, en secondes, rafraîchie à 20 images/s au plus. Figée si désactivée. */
@@ -221,21 +221,30 @@ fun CityScene(sky: SkyState, modifier: Modifier = Modifier, animate: Boolean = t
             val clouds = sky.cloud / 100f
             val night = sky.night
 
-            // RER C le long de la Seine : un passage toutes les 90 s environ
-            val cycle = 90f
-            val ph = (t % cycle) / 12f
+            // RER C à deux niveaux sur la voie des quais : un passage par minute
+            val ph = (t % 60f) / 20f
             if (ph < 1f) {
-                val len = g.w * .16f
-                val x = -len + ph * (g.w + len)
-                val y = g.base - g.u * .07f
-                drawRect(lerp(Color(0xFF1A1F22), Color(0xFF7D868A), sky.daylight * .6f), Offset(x, y), Size(len, g.u * .06f))
-                drawRect(Color(0xFFF3D311).copy(alpha = .9f), Offset(x, y + g.u * .045f), Size(len, g.u * .008f))
-                var wx = x + len * .03f
-                while (wx < x + len - len * .05f) {
-                    drawRect(Ivry.Jaune.copy(alpha = .25f + .6f * night), Offset(wx, y + g.u * .012f), Size(len * .045f, g.u * .022f))
-                    wx += len * .07f
+                val len = g.w * .27f
+                val hh = g.u * .11f
+                val x = g.w - ph * (g.w + len)
+                val y = g.base - g.u * .10f
+                val car = len / 3f
+                val body = lerp(Color(0xFF2E3438), Color(0xFFD6DADC), sky.daylight)
+                val lit = lerp(Color(0xFF3A454B), Ivry.Jaune, night * .9f)
+                for (c in 0 until 3) {
+                    val cx = x + c * car
+                    drawRect(body, Offset(cx + 1f, y), Size(car - 3f, hh))
+                    drawRect(Color(0xFF1B3A6B), Offset(cx + 1f, y + hh * .80f), Size(car - 3f, hh * .12f))
+                    for (row in 0..1) {
+                        var wx = cx + car * .06f
+                        while (wx < cx + car - car * .1f) {
+                            drawRect(lit, Offset(wx, y + hh * (.14f + row * .32f)), Size(car * .07f, hh * .2f))
+                            wx += car * .1f
+                        }
+                    }
                 }
-                drawLine(Ivry.Jaune.copy(alpha = .15f + .2f * night), Offset(x, g.base + 10f), Offset(x + len, g.base + 10f), 3f)
+                drawCircle(Ivry.Ivoire.copy(alpha = .9f), hh * .09f, Offset(x + 3f, y + hh * .62f))
+                drawLine(Ivry.Jaune.copy(alpha = .12f + .2f * night), Offset(x, g.base + 10f), Offset(x + len, g.base + 10f), 3f)
             }
 
             // Reflets de l'astre qui ondulent
@@ -325,7 +334,7 @@ private fun SkyState.sunT(): Float =
 
 private fun SkyState.sunPos(g: Geo): Offset {
     val t = sunT()
-    return Offset(g.w * (.12f + .76f * t), g.h * (.46f - .36f * sin(PI * t).toFloat()))
+    return Offset(g.w * (.12f + .76f * t), g.h * (.40f - .28f * sin(PI * t).toFloat()))
 }
 
 /** Calque fixe de la ville. */
@@ -400,6 +409,12 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     // Grues d'Ivry Confluences
     crane(Offset(w * .88f, base), u * 1.2f, w * .08f, steel.copy(alpha = .5f + .2f * day))
     crane(Offset(w * .955f, base), u * .9f, w * .05f, steel.copy(alpha = .35f + .2f * day))
+
+    // Voie du RER C le long des quais
+    val ty = base - u * .10f
+    drawRect(lerp(ground, Ivry.Beton, .14f + .10f * day), Offset(0f, ty + u * .11f), Size(w, u * .03f))
+    var px = 0f
+    while (px < w) { drawRect(lerp(ground, Ivry.Beton, .10f + .08f * day), Offset(px, ty + u * .14f), Size(u * .02f, u * .06f)); px += w * .05f }
 
     // Arbres des quais
     for (i in 0 until 14) drawCircle(lerp(ground, nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))
