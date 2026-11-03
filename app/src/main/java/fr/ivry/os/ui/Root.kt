@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -89,8 +91,12 @@ fun IvryRoot(vm: MainViewModel) {
         background = Ivry.Asphalte, onBackground = Ivry.Ivoire,
         surfaceContainerHigh = Color(0xFF26292B),
     )
-    MaterialTheme(colorScheme = scheme) {
-        CompositionLocalProvider(LocalPalette provides palette, LocalPerf provides perf) {
+    MaterialTheme(colorScheme = scheme, typography = ivryTypography()) {
+        CompositionLocalProvider(
+            LocalPalette provides palette,
+            LocalPerf provides perf,
+            LocalTextStyle provides TextStyle(fontFamily = Bricolage),
+        ) {
             Box(Modifier.fillMaxSize().background(palette.bg)) {
                 Backdrop(palette)
                 Box(Modifier.fillMaxSize().offset { shift }) {
@@ -263,6 +269,17 @@ private fun Backdrop(p: Palette) {
                     tri(Offset(w * .78f, 0f), Offset(w, 0f), Offset(w, h * .30f), Ivry.Beton.copy(alpha = .04f))
                     tri(Offset(0f, h * .70f), Offset(w * .18f, h), Offset(0f, h), Ivry.Sable.copy(alpha = .05f))
                 }
+                ThemeName.GAILHOUSTET -> {
+                    // Terrasses en gradins, jardinières
+                    for (k in 0 until 6) {
+                        val x0 = w * (.62f + k * .065f)
+                        val y0 = h * (.92f - k * .11f)
+                        drawRect(Ivry.Beton.copy(alpha = .045f), Offset(x0, y0), Size(w - x0, h - y0))
+                        drawLine(Ivry.Beton.copy(alpha = .10f), Offset(x0, y0), Offset(w, y0), 2f)
+                        var gx = x0 + 10f
+                        while (gx < w) { drawCircle(Ivry.Vert.copy(alpha = .16f), h * .012f, Offset(gx, y0 - h * .01f)); gx += h * .035f }
+                    }
+                }
                 ThemeName.POPULAIRE -> {
                     rotate(-8f, Offset(w * .82f, h * .2f)) {
                         drawRect(Ivry.Orange.copy(alpha = .07f), Offset(w * .70f, -h * .1f), Size(w * .26f, h * .45f))
@@ -295,6 +312,14 @@ private fun Backdrop(p: Palette) {
                 }
             }
             drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .35f))))
+            // Appareillage de brique discret en pied d'écran
+            val bh = h / 90f
+            val bw = bh * 3.2f
+            for (r in 0 until 2) {
+                var x = if (r % 2 == 0) 0f else -bw / 2
+                val y = h - (r + 1) * bh
+                while (x < w) { drawRect(Ivry.Brique.copy(alpha = .22f), Offset(x + 1, y + 1), Size(bw - 2, bh - 2)); x += bw }
+            }
         }
     })
 }

@@ -1,10 +1,13 @@
 package fr.ivry.os.ui
 
-import android.graphics.Typeface
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import fr.ivry.os.R
 import fr.ivry.os.data.ThemeName
 
 object Ivry {
@@ -41,7 +44,9 @@ fun paletteFor(t: ThemeName, darkBoost: Boolean, glassLevel: Int): Palette {
             accent = Ivry.Brique, accent2 = Ivry.Bleu, textDim = Ivry.Beton.copy(alpha = .62f))
         ThemeName.RENAUDIE -> Palette(t, bg = Color(0xFF1C1D1A), glass = Color(0xFF2E2F2A).copy(alpha = a),
             accent = Ivry.Sable, accent2 = Ivry.Beton, textDim = Ivry.Sable.copy(alpha = .7f))
-        ThemeName.POPULAIRE -> Palette(t, bg = Color(0xFF1A1716), glass = Color(0xFF2C2522).copy(alpha = a),
+        ThemeName.GAILHOUSTET -> Palette(t, bg = Color(0xFF181C19), glass = Color(0xFF2A302B).copy(alpha = a),
+            accent = Ivry.Vert, accent2 = Ivry.Beton, textDim = Ivry.Beton.copy(alpha = .68f))
+        ThemeName.POPULAIRE ->Palette(t, bg = Color(0xFF1A1716), glass = Color(0xFF2C2522).copy(alpha = a),
             accent = Ivry.Orange, accent2 = Ivry.Brique, textDim = Ivry.Beton.copy(alpha = .65f))
         ThemeName.CONFLUENCES -> Palette(t, bg = Color(0xFF141A1C), glass = Color(0xFF22303A).copy(alpha = a),
             accent = Ivry.Bleu, accent2 = Ivry.Vert, textDim = Color(0xFFB9C6CC))
@@ -64,5 +69,31 @@ fun Palette.dimmed() = copy(
 val LocalPalette = staticCompositionLocalOf { paletteFor(ThemeName.MANUFACTURE, false, 6) }
 val LocalPerf = staticCompositionLocalOf { false }
 
-/** Police système condensée : rappel de la signalétique urbaine. */
-val Condensed: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
+/** Bricolage Grotesque (licence OFL) : police principale, esprit affiche. */
+val Bricolage: FontFamily = FontFamily(
+    Font(R.font.bricolage_regular, FontWeight.Normal),
+    Font(R.font.bricolage_bold, FontWeight.Bold),
+    Font(R.font.bricolage_extrabold, FontWeight.ExtraBold),
+    Font(R.font.bricolage_extrabold, FontWeight.Black),
+)
+
+/** Version étroite de Bricolage : libellés façon signalétique urbaine. */
+val Condensed: FontFamily = FontFamily(
+    Font(R.font.bricolage_condensed, FontWeight.Normal),
+    Font(R.font.bricolage_condensed, FontWeight.Bold),
+)
+
+fun ivryTypography(): Typography {
+    val t = Typography()
+    val f = Bricolage
+    return Typography(
+        displayLarge = t.displayLarge.copy(fontFamily = f), displayMedium = t.displayMedium.copy(fontFamily = f),
+        displaySmall = t.displaySmall.copy(fontFamily = f), headlineLarge = t.headlineLarge.copy(fontFamily = f),
+        headlineMedium = t.headlineMedium.copy(fontFamily = f), headlineSmall = t.headlineSmall.copy(fontFamily = f),
+        titleLarge = t.titleLarge.copy(fontFamily = f), titleMedium = t.titleMedium.copy(fontFamily = f),
+        titleSmall = t.titleSmall.copy(fontFamily = f), bodyLarge = t.bodyLarge.copy(fontFamily = f),
+        bodyMedium = t.bodyMedium.copy(fontFamily = f), bodySmall = t.bodySmall.copy(fontFamily = f),
+        labelLarge = t.labelLarge.copy(fontFamily = f), labelMedium = t.labelMedium.copy(fontFamily = f),
+        labelSmall = t.labelSmall.copy(fontFamily = f),
+    )
+}

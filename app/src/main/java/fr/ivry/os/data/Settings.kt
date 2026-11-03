@@ -19,6 +19,7 @@ private val Context.dataStore by preferencesDataStore(name = "ivry_settings")
 enum class ThemeName(val label: String, val tagline: String) {
     MANUFACTURE("Manufacture", "Brique, acier, noir industriel"),
     RENAUDIE("Renaudie", "Géométrie, béton, sable"),
+    GAILHOUSTET("Gailhoustet", "Béton clair, terrasses, végétal"),
     POPULAIRE("Populaire", "Orange, jaune, affiches"),
     CONFLUENCES("Confluences", "Bleu, vert, lumière"),
 }

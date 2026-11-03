@@ -13,7 +13,7 @@ Kotlin · Jetpack Compose · MVVM · DataStore · Coroutines/Flow · sans root, 
 | Identifiants des arrêts IDFM | **À renseigner** (section 4) : je ne les ai pas inventés. |
 | Codes de lignes trafic | Préremplis (`C01377` métro 7, `C01727` RER C) — **à vérifier** dans le référentiel PRIM. |
 | Station Vélib' 42021 | Vérifiée **à l'exécution** dans les données officielles GBFS ; le nom réel s'affiche dans Paramètres › Sources. |
-| Fonds d'écran | Motifs dessinés par thème. Aucune photo : je n'en ai pas inventé. Import d'images personnelles : pas dans cette version. |
+| Fonds d'écran | Ligne d'horizon d'Ivry et motifs dessinés par thème. Aucune photo inventée. Import de photos personnelles : pas encore.
 | Création de thèmes personnalisés | Pas dans cette version (4 thèmes + verre, luminosité, mode sombre, performance). |
 
 ## 1. Structure
