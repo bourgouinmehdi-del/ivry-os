@@ -104,7 +104,7 @@ fun IvryRoot(vm: MainViewModel) {
             LocalTextStyle provides TextStyle(fontFamily = Bricolage),
         ) {
             Box(Modifier.fillMaxSize().background(palette.bg)) {
-                CityScene(sky, Modifier.fillMaxSize())
+                CityScene(sky, Modifier.fillMaxSize(), animate = !prefs.performance, slow = idle)
                 Box(Modifier.fillMaxSize().offset { shift }) {
                     if (!booted) Splash(skip = prefs.performance) { booted = true }
                     else MainShell(vm, prefs)

@@ -41,6 +41,8 @@ data class Prefs(
     val rerLineRef: String = "STIF:Line::C01727:",
     val rerFilter: String = "",
     val velibCode: String = "42021",
+    val metroWalk: Int = 5,
+    val rerWalk: Int = 8,
     val favorites: List<String> = emptyList(),
     val launchCounts: Map<String, Int> = emptyMap(),
 )
@@ -62,6 +64,8 @@ object Keys {
     val rerLine = stringPreferencesKey("rer_line")
     val rerFilter = stringPreferencesKey("rer_filter")
     val velibCode = stringPreferencesKey("velib_code")
+    val metroWalk = intPreferencesKey("metro_walk")
+    val rerWalk = intPreferencesKey("rer_walk")
     val favorites = stringPreferencesKey("favorites")
     val counts = stringPreferencesKey("counts")
     val firstRunDone = booleanPreferencesKey("first_run_done")
@@ -134,6 +138,8 @@ class SettingsRepo(context: Context) {
         rerLineRef = this[Keys.rerLine] ?: "STIF:Line::C01727:",
         rerFilter = this[Keys.rerFilter] ?: "",
         velibCode = this[Keys.velibCode] ?: "42021",
+        metroWalk = this[Keys.metroWalk] ?: 5,
+        rerWalk = this[Keys.rerWalk] ?: 8,
         favorites = decodeList(this[Keys.favorites]),
         launchCounts = decodeCounts(this[Keys.counts]),
     )

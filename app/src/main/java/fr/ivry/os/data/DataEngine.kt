@@ -54,10 +54,10 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
 
         loop("weather_now", 15 * MIN, weatherNow, { Http.get(Sources.CURRENT_URL) }) { t, _ -> Sources.parseCurrent(t) }
         loop("forecast", 30 * MIN, forecast, { Http.get(Sources.FORECAST_URL) }) { t, _ -> Sources.parseForecast(t) }
-        loop("metro7", 45 * SEC, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) }) { t, p ->
+        loop("metro7", 45 * SEC, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) }, slowWhenIdle = false) { t, p ->
             Sources.parseTransit(t, p.metroFilter)
         }
-        loop("rerC", 45 * SEC, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) }) { t, p ->
+        loop("rerC", 45 * SEC, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) }, slowWhenIdle = false) { t, p ->
             Sources.parseTransit(t, p.rerFilter)
         }
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
@@ -92,6 +92,7 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
         intervalMs: Long,
         target: MutableStateFlow<Live<T>>,
         fetch: suspend (Prefs) -> String,
+        slowWhenIdle: Boolean = true,
         parse: (String, Prefs) -> T,
     ) {
         scope.launch(Dispatchers.IO) {
@@ -113,7 +114,7 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
                 } catch (e: Exception) {
                     target.value = target.value.copy(error = describe(e))
                 }
-                val wait = if (idle.value) intervalMs * 3 else intervalMs
+                val wait = if (idle.value && slowWhenIdle) intervalMs * 3 else intervalMs
                 withTimeoutOrNull(wait) { refreshSignal.first() }
             }
         }

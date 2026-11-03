@@ -50,6 +50,8 @@ data class SkyState(
     val code: Int,
     val precip: Double,
     val moon: Float,
+    val month: Int = 1,
+    val day: Int = 1,
 ) {
     /** 1 en plein jour, 0 en pleine nuit, transition de 90 min autour du lever et du coucher. */
     val daylight: Float
@@ -81,6 +83,8 @@ fun rememberSky(weather: CurrentWeather?): SkyState {
             code = code,
             precip = weather?.precip ?: 0.0,
             moon = moonPhase(now),
+            month = Instant.ofEpochMilli(now).atZone(PARIS).monthValue,
+            day = Instant.ofEpochMilli(now).atZone(PARIS).dayOfMonth,
         )
     }
 }
@@ -124,14 +128,15 @@ private class Geo(val w: Float, val h: Float) {
 
 /** Horloge de la scène, en secondes, rafraîchie à 20 images/s au plus. Figée si désactivée. */
 @Composable
-private fun rememberSceneClock(enabled: Boolean): State<Float> {
+private fun rememberSceneClock(enabled: Boolean, slow: Boolean): State<Float> {
     val state = remember { mutableFloatStateOf((System.currentTimeMillis() % 3_600_000L) / 1000f) }
-    LaunchedEffect(enabled) {
+    LaunchedEffect(enabled, slow) {
+        val step = if (slow) 125L else 50L
         if (!enabled) return@LaunchedEffect
         var last = 0L
         while (true) {
             withFrameMillis { now ->
-                if (now - last >= 50) {
+                if (now - last >= step) {
                     last = now
                     state.floatValue = (System.currentTimeMillis() % 3_600_000L) / 1000f
                 }
@@ -148,9 +153,9 @@ private fun rememberSceneClock(enabled: Boolean): State<Float> {
  * Calques fixes (ciel, ville) mis en cache ; seuls les calques animés se redessinent.
  */
 @Composable
-fun CityScene(sky: SkyState, modifier: Modifier = Modifier) {
+fun CityScene(sky: SkyState, modifier: Modifier = Modifier, animate: Boolean = true, slow: Boolean = false) {
     val p = LocalPalette.current
-    val time = rememberSceneClock(enabled = !LocalPerf.current)
+    val time = rememberSceneClock(enabled = animate, slow = slow)
     Box(modifier) {
         // 1. Ciel fixe : dégradé et astre
         Spacer(Modifier.fillMaxSize().drawWithCache {
@@ -253,6 +258,47 @@ fun CityScene(sky: SkyState, modifier: Modifier = Modifier) {
             if (night > .5f && (t % 2f) < 1f) {
                 drawCircle(Color(0xFFE24B4A).copy(alpha = .9f), 2.5f, Offset(g.w * .88f, g.base - g.u * 1.2f - 4f))
                 drawCircle(Color(0xFFE24B4A).copy(alpha = .9f), 2.5f, Offset(g.w * .955f, g.base - g.u * .9f - 4f))
+            }
+
+            // Moments de la ville : feux d'artifice (14 juillet, Nouvel An), guirlandes en décembre
+            val fireworks = (sky.month == 7 && sky.day == 14) || (sky.month == 12 && sky.day == 31) || (sky.month == 1 && sky.day == 1)
+            if (fireworks && night > .5f) for (b in 0 until 3) {
+                val period = 3.4f
+                val tt = t + b * 1.13f
+                val k = (tt / period).toInt()
+                val ph = (tt % period) / period
+                val cx = g.w * (.18f + ((k * 37 + b * 13) % 64) / 100f)
+                val cy = g.h * (.08f + ((k * 17 + b * 7) % 16) / 100f)
+                val col = listOf(Ivry.Jaune, Ivry.Orange, Ivry.Ivoire, Color(0xFFFA9ABA), Ivry.Pluie)[(k + b) % 5]
+                if (ph < .18f) {
+                    drawLine(col.copy(alpha = .7f), Offset(cx, g.base), Offset(cx, g.base - (g.base - cy) * ph / .18f), 2f)
+                } else {
+                    val e = (ph - .18f) / .82f
+                    val r = g.h * .09f * e
+                    for (i in 0 until 20) {
+                        val a = 2 * PI.toFloat() * i / 20
+                        drawCircle(col.copy(alpha = (1f - e).coerceIn(0f, 1f)), 2.2f,
+                            Offset(cx + cos(a) * r, cy + sin(a) * r + e * e * g.h * .025f))
+                    }
+                    drawCircle(col.copy(alpha = .08f * (1f - e)), r * 1.2f, Offset(cx, cy))
+                }
+            }
+            if (sky.month == 12) {
+                val y0 = g.base - g.u * .14f
+                val bulbs = listOf(Ivry.Jaune, Ivry.Orange, Ivry.Ivoire, Color(0xFF7FA387))
+                for (sw in 0 until 6) {
+                    val x0 = g.w * (.02f + sw * .165f)
+                    val x1 = x0 + g.w * .15f
+                    var i = 0
+                    var x = x0
+                    while (x <= x1) {
+                        val f = (x - x0) / (x1 - x0)
+                        val y = y0 + 4f * f * (1f - f) * g.u * .07f
+                        val glow = .45f + .45f * sin(t * 2.2f + i * 1.3f + sw)
+                        drawCircle(bulbs[(i + sw) % bulbs.size].copy(alpha = (glow * (.4f + .6f * night)).coerceIn(0f, 1f)), 2.2f, Offset(x, y))
+                        x += g.w * .011f; i++
+                    }
+                }
             }
 
             // Pluie (densité selon les mm réels) et neige qui tombent

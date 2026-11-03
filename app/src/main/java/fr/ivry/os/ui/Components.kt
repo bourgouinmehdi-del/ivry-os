@@ -1,5 +1,6 @@
 package fr.ivry.os.ui
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -7,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
@@ -23,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -68,9 +71,15 @@ fun Plate(
     val perf = LocalPerf.current
     var focused by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
-    val scale by animateFloatAsState(if (focused && !perf) 1.035f else 1f, tween(140), label = "plate")
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when { pressed -> .97f; focused && !perf -> 1.04f; else -> 1f }, tween(140), label = "plate",
+    )
+    val lift by animateDpAsState(if (focused && !perf) (-3).dp else 0.dp, tween(140), label = "lift")
     var m = modifier
-        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .graphicsLayer { scaleX = scale; scaleY = scale; translationY = lift.toPx() }
+    if (focused && !perf) m = m.shadow(18.dp, shape, ambientColor = p.focus, spotColor = p.focus)
+    m = m
         .clip(shape)
         .background(background ?: p.glass)
         .background(Brush.verticalGradient(0f to Color.White.copy(alpha = .06f), .35f to Color.Transparent))
@@ -181,7 +190,8 @@ fun AppTile(app: AppEntry, favorite: Boolean, modifier: Modifier = Modifier, onC
     val p = LocalPalette.current
     Plate(modifier, onClick = onClick) { f ->
         if (app.banner != null) {
-            Image(bitmap = app.banner, contentDescription = app.label, modifier = Modifier.fillMaxSize(),
+            Image(bitmap = app.banner, contentDescription = app.label,
+                modifier = Modifier.fillMaxSize().padding(5.dp).clip(RoundedCornerShape(3.dp)),
                 contentScale = ContentScale.Crop)
         } else {
             Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.Center,

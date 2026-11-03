@@ -3,10 +3,14 @@ package fr.ivry.os.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +64,10 @@ fun HomeScreen(
     Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 24.dp, top = 14.dp, bottom = 12.dp)) {
         // ZONE 1 — identité et heure, posées dans le ciel
         IvryHeader(weather.value, online, { onSection(Section.SETTINGS) })
+        val alerts = remember(weather.value, forecast.value, velib.value) {
+            buildAlerts(weather.value, forecast.value, velib.value)
+        }
+        if (alerts.isNotEmpty()) AlertsRow(alerts, Modifier.padding(top = 6.dp))
 
         // La ville reste visible entre l'en-tête et les modules
         Spacer(Modifier.weight(.25f))
@@ -68,9 +76,9 @@ fun HomeScreen(
         Row(Modifier.fillMaxWidth().weight(.40f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WeatherPanel(weather, forecast, Modifier.weight(1.3f)) { onDetail(Detail.WEATHER) }
             TransitPanel("7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve – 8 Mai 1945",
-                metro, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
+                metro, prefs.metroWalk, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
             TransitPanel("C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris et nord de la ligne",
-                rer, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
+                rer, prefs.rerWalk, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
             VelibPanel(velib, Modifier.weight(.9f)) { onDetail(Detail.VELIB) }
         }
         Spacer(Modifier.height(10.dp))
@@ -165,7 +173,7 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
 @Composable
 private fun TransitPanel(
     code: String, round: Boolean, color: Color, title: String, station: String, direction: String,
-    live: Live<Transit>, shape: Shape, modifier: Modifier, onClick: () -> Unit,
+    live: Live<Transit>, walk: Int, shape: Shape, modifier: Modifier, onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
     val now = rememberTick(15_000)
@@ -195,12 +203,31 @@ private fun TransitPanel(
                     fontSize = 11.sp, lineHeight = 14.sp, color = p.textDim,
                 )
                 deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 12.sp, color = p.textDim)
-                else -> deps.forEach { d ->
+                else -> {
+                    // Prochain départ en grand, avec le moment où partir selon le temps de marche
+                    val first = deps.first()
+                    val m = ((first.expectedAt - now) / 60_000L).toInt()
+                    val (leave, leaveColor) = when {
+                        m < walk -> "Trop juste à pied" to p.textDim
+                        m - walk <= 2 -> "Pars maintenant" to p.warn
+                        else -> "Pars dans ${m - walk} min" to p.nature
+                    }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(d.destination, fontSize = 10.5.sp, color = p.textDim, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        Text(minutesLabel(d, now), fontSize = 19.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold,
-                            color = p.text)
+                        Column(Modifier.weight(1f)) {
+                            Text(first.destination, fontSize = 10.sp, lineHeight = 12.sp, color = p.textDim, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                            Text(leave, fontSize = 10.5.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = leaveColor, maxLines = 1)
+                        }
+                        Text(minutesLabel(first, now), fontSize = 27.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold,
+                            color = if (leaveColor == p.warn) p.warn else p.text)
+                    }
+                    deps.drop(1).forEach { d ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(d.destination, fontSize = 10.sp, color = p.textDim, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text(minutesLabel(d, now), fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.ExtraBold,
+                                color = p.text.copy(alpha = .85f))
+                        }
                     }
                 }
             }
@@ -211,7 +238,7 @@ private fun TransitPanel(
                     t.messages.isEmpty() -> "Aucune perturbation signalée" to false
                     else -> t.messages.first() to true
                 }
-                Text(txt, fontSize = 10.sp, color = if (warn) p.warn else p.nature, maxLines = 2,
+                Text(txt, fontSize = 10.sp, color = if (warn) p.warn else p.nature, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, fontWeight = if (warn) FontWeight.Bold else FontWeight.Normal)
                 Spacer(Modifier.height(2.dp))
             }
@@ -318,6 +345,46 @@ private fun CinemaCard(count: Int, modifier: Modifier, onClick: () -> Unit) {
                 Text(if (count > 1) "applis vidéo" else "appli vidéo", fontSize = 11.sp, color = p.textDim)
             }
             Text("Cinéma ›", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (f) p.focus else p.textDim)
+        }
+    }
+}
+
+// ---------- Alertes utiles ----------
+
+/** Alertes tirées uniquement des données réelles ; aucune n'est affichée si rien ne le justifie. */
+private fun buildAlerts(w: CurrentWeather?, f: Forecast?, v: Velib?): List<String> {
+    val out = ArrayList<String>()
+    val rainingNow = w != null && (w.code in 51..67 || w.code in 80..82 || w.code >= 95)
+    if (w != null && f != null && !rainingNow) {
+        f.hourly.drop(1).take(3).firstOrNull { it.rainProb >= 60 }?.let {
+            out += "Pluie probable vers ${it.hour} h : prends un parapluie"
+        }
+    }
+    if (w != null && w.gusts >= 60) out += "Rafales jusqu'à ${w.gusts.roundToInt()} km/h"
+    f?.daily?.firstOrNull()?.let { if (it.min <= 0.0) out += "Gel possible demain matin (${deg(it.min)})" }
+    if (v != null) when {
+        v.mechanical + v.ebike == 0 -> out += "Plus aucun vélo à la station Vélib'"
+        v.ebike == 0 -> out += "Plus de vélo électrique à la station Vélib'"
+    }
+    if (v != null && v.docks == 0) out += "Plus de bornette libre pour rendre un vélo"
+    return out.take(2)
+}
+
+@Composable
+private fun AlertsRow(alerts: List<String>, modifier: Modifier) {
+    val p = LocalPalette.current
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        alerts.forEach { a ->
+            Row(
+                Modifier.background(Color.Black.copy(alpha = .45f), CutCornerShape(topEnd = 8.dp))
+                    .border(1.dp, p.warn.copy(alpha = .55f), CutCornerShape(topEnd = 8.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Warning, null, tint = p.warn, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(a, fontSize = 12.sp, color = Ivry.Ivoire, maxLines = 1)
+            }
         }
     }
 }
