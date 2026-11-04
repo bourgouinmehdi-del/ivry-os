@@ -471,10 +471,10 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     drawRect(Ivry.Ivoire.copy(alpha = .92f), Offset(signX - boxW / 2, poleTop - boxH), Size(boxW, boxH))
     drawRect(Color(0xFF1F2D4A), Offset(signX - boxW / 2, poleTop - boxH), Size(boxW, boxH * .32f))
     val tw2 = boxW * .6f; val th2 = boxH * .22f
-    val tx = signX - tw2 / 2; val ty = poleTop - boxH * .58f
-    drawRect(Color(0xFF1F2D4A), Offset(tx, ty), Size(tw2, th2))
-    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .22f, ty + th2))
-    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .78f, ty + th2))
+    val tx = signX - tw2 / 2; val tyIcon = poleTop - boxH * .58f
+    drawRect(Color(0xFF1F2D4A), Offset(tx, tyIcon), Size(tw2, th2))
+    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .22f, tyIcon + th2))
+    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .78f, tyIcon + th2))
 
     // Arbres des quais, parasols l'été
     for (i in 0 until 14) drawCircle(lerp(ground, nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))
