@@ -55,12 +55,26 @@ object AppsRepository {
     fun findYoutube(apps: List<AppEntry>): AppEntry? =
         apps.firstOrNull { it.pkg == YOUTUBE_TV } ?: apps.firstOrNull { it.label.equals("YouTube", true) }
 
-    fun byUsage(apps: List<AppEntry>, prefs: Prefs): List<AppEntry> =
-        apps.sortedWith(compareByDescending<AppEntry> { prefs.launchCounts[it.pkg] ?: 0 }.thenBy { it.label.lowercase() })
+    /** Masquées non comprises : « Organiser » reste le seul endroit où elles réapparaissent. */
+    fun visible(apps: List<AppEntry>, prefs: Prefs): List<AppEntry> = apps.filter { it.pkg !in prefs.hidden }
 
-    /** « Le reste » : favoris dans l'ordre choisi, puis les autres par fréquence d'utilisation. */
+    /**
+     * Par ordre choisi à la main (« Organiser ») quand il existe, sinon par fréquence d'utilisation.
+     * Toute application absente de l'ordre choisi est ajoutée à la fin, par fréquence.
+     */
+    fun byUsage(apps: List<AppEntry>, prefs: Prefs): List<AppEntry> {
+        val vis = visible(apps, prefs)
+        val byUse = vis.sortedWith(compareByDescending<AppEntry> { prefs.launchCounts[it.pkg] ?: 0 }.thenBy { it.label.lowercase() })
+        if (prefs.appOrder.isEmpty()) return byUse
+        val ordered = prefs.appOrder.mapNotNull { pkg -> vis.firstOrNull { it.pkg == pkg } }
+        val rest = byUse.filter { it.pkg !in prefs.appOrder }
+        return ordered + rest
+    }
+
+    /** « Le reste » : favoris dans l'ordre choisi, puis les autres par ordre choisi ou fréquence d'utilisation. */
     fun secondary(apps: List<AppEntry>, prefs: Prefs, exclude: Set<String>): List<AppEntry> {
-        val favs = prefs.favorites.mapNotNull { f -> apps.firstOrNull { it.pkg == f } }.filter { it.pkg !in exclude }
+        val favs = prefs.favorites.mapNotNull { f -> apps.firstOrNull { it.pkg == f } }
+            .filter { it.pkg !in exclude && it.pkg !in prefs.hidden }
         val rest = byUsage(apps, prefs).filter { it.pkg !in exclude && it.pkg !in prefs.favorites }
         return favs + rest
     }

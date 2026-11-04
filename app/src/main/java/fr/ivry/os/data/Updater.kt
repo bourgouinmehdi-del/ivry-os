@@ -14,7 +14,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class UpdateInfo(val versionCode: Int, val name: String, val apkUrl: String)
+data class UpdateInfo(val versionCode: Int, val name: String, val apkUrl: String, val notes: String? = null)
 
 /**
  * Mises à jour depuis les versions publiées sur GitHub par GitHub Actions.
@@ -39,7 +39,11 @@ object Updater {
             if (a.optString("name").endsWith(".apk")) { url = a.optString("browser_download_url"); break }
         }
         if (url == null || code <= currentVersion(ctx)) return null
-        return UpdateInfo(code, o.optString("name", "IVRY OS 1.$code"), url)
+        // Première ligne non vide du changelog publié par GitHub Actions, débarrassée des puces Markdown.
+        val notes = o.optString("body").lineSequence()
+            .map { it.trim().removePrefix("-").removePrefix("*").trim() }
+            .firstOrNull { it.isNotEmpty() }
+        return UpdateInfo(code, o.optString("name", "IVRY OS 1.$code"), url, notes)
     }
 
     suspend fun download(ctx: Context, info: UpdateInfo): File = withContext(Dispatchers.IO) {

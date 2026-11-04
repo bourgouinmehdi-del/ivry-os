@@ -49,6 +49,8 @@ data class Prefs(
     val metroWalk: Int = 5,
     val rerWalk: Int = 8,
     val favorites: List<String> = emptyList(),
+    val hidden: List<String> = emptyList(),
+    val appOrder: List<String> = emptyList(),
     val launchCounts: Map<String, Int> = emptyMap(),
 )
 
@@ -74,6 +76,8 @@ object Keys {
     val metroWalk = intPreferencesKey("metro_walk")
     val rerWalk = intPreferencesKey("rer_walk")
     val favorites = stringPreferencesKey("favorites")
+    val hidden = stringPreferencesKey("hidden")
+    val appOrder = stringPreferencesKey("app_order")
     val counts = stringPreferencesKey("counts")
     val firstRunDone = booleanPreferencesKey("first_run_done")
 }
@@ -105,6 +109,38 @@ class SettingsRepo(context: Context) {
             if (i >= 0 && j in l.indices) {
                 l.removeAt(i); l.add(j, pkg)
                 it[Keys.favorites] = l.joinToString(",")
+            }
+        }
+    }
+
+    /** Masque une application des listes (accueil, « Applications ») sans la désinstaller. */
+    suspend fun toggleHidden(pkg: String) {
+        ctx.dataStore.edit {
+            val l = decodeList(it[Keys.hidden]).toMutableList()
+            val wasHidden = l.remove(pkg)
+            if (!wasHidden) {
+                l.add(pkg)
+                // Un favori masqué n'aurait plus de sens sur l'accueil.
+                val favs = decodeList(it[Keys.favorites]).toMutableList()
+                if (favs.remove(pkg)) it[Keys.favorites] = favs.joinToString(",")
+            }
+            it[Keys.hidden] = l.joinToString(",")
+        }
+    }
+
+    /**
+     * Déplace une application dans la liste « Applications », qu'elle soit favorite ou non.
+     * [order] est l'ordre actuellement affiché : on l'adopte comme nouvel ordre de référence,
+     * ce qui couvre aussi les applications jamais déplacées jusqu'ici.
+     */
+    suspend fun moveApp(pkg: String, delta: Int, order: List<String>) {
+        ctx.dataStore.edit {
+            val l = order.toMutableList()
+            val i = l.indexOf(pkg)
+            val j = i + delta
+            if (i >= 0 && j in l.indices) {
+                l.removeAt(i); l.add(j, pkg)
+                it[Keys.appOrder] = l.joinToString(",")
             }
         }
     }
@@ -150,6 +186,8 @@ class SettingsRepo(context: Context) {
         metroWalk = this[Keys.metroWalk] ?: 5,
         rerWalk = this[Keys.rerWalk] ?: 8,
         favorites = decodeList(this[Keys.favorites]),
+        hidden = decodeList(this[Keys.hidden]),
+        appOrder = decodeList(this[Keys.appOrder]),
         launchCounts = decodeCounts(this[Keys.counts]),
     )
 

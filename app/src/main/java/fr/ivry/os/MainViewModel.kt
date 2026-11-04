@@ -98,6 +98,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun <T> set(key: Preferences.Key<T>, value: T) { viewModelScope.launch { settings.set(key, value) } }
     fun toggleFavorite(pkg: String) { viewModelScope.launch { settings.toggleFavorite(pkg) } }
     fun moveFavorite(pkg: String, delta: Int) { viewModelScope.launch { settings.moveFavorite(pkg, delta) } }
+    fun toggleHidden(pkg: String) { viewModelScope.launch { settings.toggleHidden(pkg) } }
+    fun moveApp(pkg: String, delta: Int, order: List<String>) { viewModelScope.launch { settings.moveApp(pkg, delta, order) } }
 
     /** Configuration par ADB : adb shell am start -n fr.ivry.os/.MainActivity --es proxyUrl "https://…" */
     fun applyExtras(ex: Bundle) {

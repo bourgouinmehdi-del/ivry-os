@@ -28,13 +28,15 @@ fun AppsScreen(vm: MainViewModel, prefs: Prefs, apps: List<AppEntry>, section: S
     val p = LocalPalette.current
     var query by rememberSaveable { mutableStateOf("") }
     var editMode by rememberSaveable { mutableStateOf(false) }
+    var showHidden by rememberSaveable { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var actionFor by remember { mutableStateOf<AppEntry?>(null) }
 
-    val list = remember(apps, prefs.favorites, prefs.launchCounts, section, query) {
-        val base = when (section) {
-            Section.CINEMA -> AppsRepository.cinema(apps, prefs)
-            Section.FAVORITES -> prefs.favorites.mapNotNull { f -> apps.firstOrNull { it.pkg == f } }
+    val list = remember(apps, prefs.favorites, prefs.hidden, prefs.appOrder, prefs.launchCounts, section, query, showHidden) {
+        val base = when {
+            section == Section.CINEMA -> AppsRepository.cinema(apps, prefs)
+            section == Section.FAVORITES -> prefs.favorites.mapNotNull { f -> apps.firstOrNull { it.pkg == f } }
+            showHidden -> apps.filter { it.pkg in prefs.hidden }
             else -> AppsRepository.byUsage(apps, prefs)
         }
         if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
@@ -53,8 +55,13 @@ fun AppsScreen(vm: MainViewModel, prefs: Prefs, apps: List<AppEntry>, section: S
             }
             ActionButton("Rechercher", Icons.Default.Search) { showSearch = true }
             Spacer(Modifier.width(8.dp))
+            if (editMode && section != Section.FAVORITES && section != Section.CINEMA) {
+                ActionButton(if (showHidden) "Afficher tout" else "Voir les masquées") { showHidden = !showHidden }
+                Spacer(Modifier.width(8.dp))
+            }
             ActionButton(if (editMode) "Terminer" else "Organiser", if (editMode) Icons.Default.Check else Icons.Default.Edit) {
                 editMode = !editMode
+                if (!editMode) showHidden = false
             }
         }
         if (query.isNotBlank()) {
@@ -67,14 +74,18 @@ fun AppsScreen(vm: MainViewModel, prefs: Prefs, apps: List<AppEntry>, section: S
         }
         if (editMode) {
             Spacer(Modifier.height(6.dp))
-            Text("Mode organisation : OK sur une application pour la mettre en favori ou la déplacer.",
-                fontSize = 12.sp, color = p.focus)
+            Text(
+                if (showHidden) "Applications masquées : OK pour les réafficher."
+                else "Mode organisation : OK sur une application pour la mettre en favori, la déplacer ou la masquer.",
+                fontSize = 12.sp, color = p.focus,
+            )
         }
         Spacer(Modifier.height(12.dp))
         if (list.isEmpty()) {
             Text(
-                when (section) {
-                    Section.FAVORITES -> "Aucun favori. Ouvre « Applications », active « Organiser » puis ajoute des favoris."
+                when {
+                    showHidden -> "Aucune application masquée."
+                    section == Section.FAVORITES -> "Aucun favori. Ouvre « Applications », active « Organiser » puis ajoute des favoris."
                     else -> "Aucune application trouvée."
                 },
                 fontSize = 13.sp, color = p.textDim,
@@ -99,21 +110,36 @@ fun AppsScreen(vm: MainViewModel, prefs: Prefs, apps: List<AppEntry>, section: S
 
     actionFor?.let { app ->
         val fav = app.pkg in prefs.favorites
-        val idx = prefs.favorites.indexOf(app.pkg)
+        val hidden = app.pkg in prefs.hidden
+        val favIdx = prefs.favorites.indexOf(app.pkg)
+        val order = list.map { it.pkg }
+        val idx = order.indexOf(app.pkg)
+        val reorderable = section == Section.APPS && !hidden
         AlertDialog(
             onDismissRequest = { actionFor = null },
             title = { Text(app.label) },
             text = {
                 Column {
-                    TextButton(onClick = { actionFor = null; vm.requestLaunch(app.pkg) }) { Text("Lancer") }
-                    TextButton(onClick = { vm.toggleFavorite(app.pkg); actionFor = null }) {
-                        Text(if (fav) "Retirer des favoris" else "Ajouter aux favoris")
-                    }
-                    if (fav && idx > 0) TextButton(onClick = { vm.moveFavorite(app.pkg, -1); actionFor = null }) {
-                        Text("Avancer d'une place")
-                    }
-                    if (fav && idx < prefs.favorites.size - 1) TextButton(onClick = { vm.moveFavorite(app.pkg, 1); actionFor = null }) {
-                        Text("Reculer d'une place")
+                    if (!hidden) TextButton(onClick = { actionFor = null; vm.requestLaunch(app.pkg) }) { Text("Lancer") }
+                    if (hidden) {
+                        TextButton(onClick = { vm.toggleHidden(app.pkg); actionFor = null }) { Text("Réafficher") }
+                    } else {
+                        TextButton(onClick = { vm.toggleFavorite(app.pkg); actionFor = null }) {
+                            Text(if (fav) "Retirer des favoris" else "Ajouter aux favoris")
+                        }
+                        if (fav && favIdx > 0) TextButton(onClick = { vm.moveFavorite(app.pkg, -1); actionFor = null }) {
+                            Text("Favori : avancer d'une place")
+                        }
+                        if (fav && favIdx < prefs.favorites.size - 1) TextButton(onClick = { vm.moveFavorite(app.pkg, 1); actionFor = null }) {
+                            Text("Favori : reculer d'une place")
+                        }
+                        if (reorderable && idx > 0) TextButton(onClick = { vm.moveApp(app.pkg, -1, order); actionFor = null }) {
+                            Text("Avancer dans la liste")
+                        }
+                        if (reorderable && idx < order.size - 1) TextButton(onClick = { vm.moveApp(app.pkg, 1, order); actionFor = null }) {
+                            Text("Reculer dans la liste")
+                        }
+                        if (!fav) TextButton(onClick = { vm.toggleHidden(app.pkg); actionFor = null }) { Text("Masquer") }
                     }
                 }
             },

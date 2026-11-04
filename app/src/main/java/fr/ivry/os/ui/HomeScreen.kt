@@ -72,21 +72,23 @@ fun HomeScreen(
     Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 24.dp, top = 14.dp, bottom = 12.dp)) {
         // ZONE 1 — identité et heure, posées dans le ciel
         IvryHeader(weather.value, online, { onSection(Section.SETTINGS) })
-        val alerts = remember(weather.value, forecast.value, velib.value) {
-            buildAlerts(weather.value, forecast.value, velib.value)
+        val alerts = remember(weather.value, forecast.value, velib.value, metro.value, rer.value) {
+            buildAlerts(weather.value, forecast.value, velib.value, metro.value, rer.value)
         }
         if (alerts.isNotEmpty()) AlertsRow(alerts, Modifier.padding(top = 6.dp))
         val update by vm.update.collectAsStateWithLifecycle()
         update.info?.let { info ->
             Plate(Modifier.padding(top = 6.dp).height(30.dp), shape = CutCornerShape(topEnd = 8.dp),
                 background = Ivry.Jaune.copy(alpha = .9f), onClick = { vm.installUpdate() }) { f ->
+                val text = when {
+                    update.busy -> "Téléchargement de ${info.name}…"
+                    update.message != null -> update.message!!
+                    info.notes != null -> "${info.name} : ${info.notes} · OK pour installer"
+                    else -> "Mise à jour disponible : ${info.name} · OK pour installer"
+                }
                 Text(
-                    when {
-                        update.busy -> "Téléchargement de ${info.name}…"
-                        update.message != null -> update.message!!
-                        else -> "Mise à jour disponible : ${info.name} · OK pour installer"
-                    },
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ivry.Asphalte,
+                    text, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ivry.Asphalte,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp),
                 )
             }
@@ -439,8 +441,11 @@ private fun CinemaCard(count: Int, modifier: Modifier, onClick: () -> Unit) {
 // ---------- Alertes utiles ----------
 
 /** Alertes tirées uniquement des données réelles ; aucune n'est affichée si rien ne le justifie. */
-private fun buildAlerts(w: CurrentWeather?, f: Forecast?, v: Velib?): List<String> {
+private fun buildAlerts(w: CurrentWeather?, f: Forecast?, v: Velib?, metro: Transit?, rer: Transit?): List<String> {
     val out = ArrayList<String>()
+    // Perturbations trafic : priorité, car elles changent le trajet du jour.
+    metro?.messages?.firstOrNull()?.let { out += "Métro 7 : $it" }
+    rer?.messages?.firstOrNull()?.let { out += "RER C : $it" }
     val rainingNow = w != null && (w.code in 51..67 || w.code in 80..82 || w.code >= 95)
     if (w != null && f != null && !rainingNow) {
         f.hourly.drop(1).take(3).firstOrNull { it.rainProb >= 60 }?.let {
@@ -454,7 +459,7 @@ private fun buildAlerts(w: CurrentWeather?, f: Forecast?, v: Velib?): List<Strin
         v.ebike == 0 -> out += "Plus de vélo électrique à la station Vélib'"
     }
     if (v != null && v.docks == 0) out += "Plus de bornette libre pour rendre un vélo"
-    return out.take(2)
+    return out.take(3)
 }
 
 @Composable
