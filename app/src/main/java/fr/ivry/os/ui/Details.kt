@@ -80,6 +80,8 @@ private fun WeatherDetail(w: Live<CurrentWeather>, f: Live<Forecast>) {
     val now = rememberTick(15_000)
     val c = w.value
     if (c != null) Row(verticalAlignment = Alignment.CenterVertically) {
+        WeatherIcon(c.code, isNightHour(java.time.LocalTime.now(fr.ivry.os.data.PARIS).hour, c.sunrise, c.sunset), Modifier.size(72.dp))
+        Spacer(Modifier.width(12.dp))
         Text(deg(c.temp), fontSize = 72.sp, fontWeight = FontWeight.Black, color = p.text, fontFamily = Condensed)
         Spacer(Modifier.width(18.dp))
         Column {
@@ -100,6 +102,7 @@ private fun WeatherDetail(w: Live<CurrentWeather>, f: Live<Forecast>) {
             fc.hourly.forEach { h ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("${h.hour}h", fontSize = 11.sp, color = p.textDim)
+                    WeatherIcon(h.code, isNightHour(h.hour, c?.sunrise, c?.sunset), Modifier.padding(vertical = 2.dp).size(26.dp))
                     Text(deg(h.temp), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = p.text)
                     Text("${h.rainProb}%", fontSize = 10.sp, color = Ivry.Pluie)
                 }
@@ -114,6 +117,7 @@ private fun WeatherDetail(w: Live<CurrentWeather>, f: Live<Forecast>) {
                     Column(Modifier.padding(12.dp)) {
                         Text(DAY.format(d.date).replaceFirstChar { it.uppercase() }, fontSize = 12.sp,
                             fontWeight = FontWeight.Bold, color = p.text)
+                        WeatherIcon(d.code, false, Modifier.padding(vertical = 4.dp).size(30.dp))
                         Text("${deg(d.max)} / ${deg(d.min)}", fontSize = 20.sp, fontWeight = FontWeight.Black,
                             color = p.text, fontFamily = Condensed)
                         Text(wmoLabel(d.code), fontSize = 11.sp, color = p.textDim, maxLines = 1)

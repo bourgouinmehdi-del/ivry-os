@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -230,9 +231,6 @@ fun CityScene(
             // RER C : un arrêt en gare toutes les 90 s, avec voyageurs
             drawRer(g, sky, t, trainTimes)
 
-            // Un tram/bus qui glisse au loin, pour densifier la ville sans surcharger la scène
-            drawTram(g, sky, t)
-
             // Reflets de l'astre qui ondulent
             val astre = if (sky.daylight > .5f) sky.sunPos(g) else Offset(g.w * .70f, g.h * .14f)
             val refl = if (sky.daylight > .5f) Color(0xFFF6EBD0) else Ivry.Ivoire
@@ -312,17 +310,6 @@ fun CityScene(
                 drawCircle(Ivry.Ivoire.copy(alpha = .5f), 1.5f + (i % 3), Offset(x, y))
             }
 
-            // Feuilles d'automne qui tombent en tournoyant
-            if (sky.month in 9..11 && !sky.rain && !sky.snow) {
-                val leaves = listOf(Color(0xFFD9822B), Color(0xFFB5451F), Color(0xFFE3B23C))
-                for (i in 0 until 36) {
-                    val y = ((((i * 6007) % 1000) / 1000f * g.base) + t * g.h * .035f) % g.base
-                    val x = ((i * 7919) % 1000) / 1000f * g.w + g.w * .05f * sin(t * .4f + i)
-                    val sz = g.h * .007f
-                    drawCircle(leaves[i % leaves.size].copy(alpha = .55f), sz,
-                        Offset(x + sz * cos(t * 2f + i), y + sz * sin(t * 2f + i)))
-                }
-            }
             // Givre qui scintille doucement les nuits d'hiver
             if ((sky.month == 12 || sky.month <= 2) && night > .4f) for (i in 0 until 22) {
                 val x = ((i * 5003) % 1000) / 1000f * g.w
@@ -420,61 +407,20 @@ private fun DrawScope.drawCity(g: Geo, sky: SkyState, low: Color, nature: Color,
     drawRect(lerp(ground, Ivry.Beton, .14f + .10f * day), Offset(0f, ty + u * .11f), Size(w, u * .03f))
     var px = 0f
     while (px < w) { drawRect(lerp(ground, Ivry.Beton, .10f + .08f * day), Offset(px, ty + u * .14f), Size(u * .02f, u * .06f)); px += w * .05f }
-    // Caténaire : poteaux et fil au-dessus de la voie
+    // Gare d'Ivry-sur-Seine : quai, bâtiment voyageurs en brique et pierre, totem RER
     val deck = base + u * .01f
-    val wire = deck - u * .23f
-    val mast = lerp(ground, Ivry.Beton, .22f + .15f * day)
-    var mx = w * .02f
-    while (mx < w) {
-        drawLine(mast, Offset(mx, deck), Offset(mx, wire - u * .03f), 2f)
-        drawLine(mast, Offset(mx, wire - u * .02f), Offset(mx + w * .015f, wire - u * .02f), 1.5f)
-        mx += w * .09f
-    }
-    drawLine(mast, Offset(0f, wire), Offset(w, wire), 1.2f)
-
-    // Gare d'Ivry-sur-Seine : quai, verrière inclinée, passerelle avec escaliers, panneau de gare
     val q0 = w * STATION_X0; val q1 = w * STATION_X1
     drawRect(lerp(ground, Ivry.Beton, .30f + .25f * day), Offset(q0, deck), Size(q1 - q0, u * .05f))
     drawRect(lerp(ground, Ivry.Beton, .18f + .15f * day), Offset(q0, deck + u * .05f), Size(q1 - q0, u * .03f))
-
-    // Verrière du quai : légère pente, filet lumineux, poteaux régulièrement espacés
-    val roofX0 = q0 + w * .015f; val roofX1 = q1 - w * .015f
-    val roofY0 = deck - u * .23f; val roofY1 = deck - u * .19f
-    drawPath(Path().apply {
-        moveTo(roofX0, roofY0); lineTo(roofX1, roofY1); lineTo(roofX1, roofY1 + u * .018f); lineTo(roofX0, roofY0 + u * .018f); close()
-    }, lerp(ground, Ivry.Beton, .22f + .18f * day))
-    drawLine(lerp(ground, Ivry.Ivoire, .3f + .2f * day).copy(alpha = .35f), Offset(roofX0, roofY0), Offset(roofX1, roofY1), 1.2f)
-    var rpx = roofX0 + w * .015f
-    while (rpx < roofX1) {
-        val f = (rpx - roofX0) / (roofX1 - roofX0)
-        val ry = roofY0 + (roofY1 - roofY0) * f
-        drawLine(mast, Offset(rpx, ry + u * .018f), Offset(rpx, deck), 2f)
-        rpx += w * .055f
-    }
-
-    // Passerelle piétonne au-dessus des voies, avec ses deux escaliers
-    val bx0 = w * .36f; val bx1 = w * .46f
-    val bridgeY = deck - u * .34f
-    drawRect(lerp(ground, Ivry.Beton, .28f + .2f * day), Offset(bx0, bridgeY), Size(bx1 - bx0, u * .022f))
-    stairs(bx0, bridgeY + u * .022f, deck, mast)
-    stairs(bx1, bridgeY + u * .022f, deck, mast)
+    val mast = lerp(ground, Ivry.Beton, .22f + .15f * day)
+    stationBuilding(w * .47f, deck, w * .13f, u, sky, ground)
 
     // Escaliers d'entrée aux deux extrémités du quai : les voyageurs y descendent, ils ne disparaissent pas
     stairway(q0 + w * .012f, deck, u, mast)
     stairway(q1 - w * .012f, deck, u, mast)
 
-    // Panneau de gare : totem sombre, plaque blanche à bandeau bleu et pictogramme train
-    val signX = q0 + w * .016f
-    val poleTop = deck - u * .185f
-    drawLine(Color(0xFF1A1D22), Offset(signX, poleTop), Offset(signX, deck), 2.4f)
-    val boxW = u * .095f; val boxH = u * .09f
-    drawRect(Ivry.Ivoire.copy(alpha = .92f), Offset(signX - boxW / 2, poleTop - boxH), Size(boxW, boxH))
-    drawRect(Color(0xFF1F2D4A), Offset(signX - boxW / 2, poleTop - boxH), Size(boxW, boxH * .32f))
-    val tw2 = boxW * .6f; val th2 = boxH * .22f
-    val tx = signX - tw2 / 2; val tyIcon = poleTop - boxH * .58f
-    drawRect(Color(0xFF1F2D4A), Offset(tx, tyIcon), Size(tw2, th2))
-    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .22f, tyIcon + th2))
-    drawCircle(Color(0xFF1F2D4A), th2 * .5f, Offset(tx + tw2 * .78f, tyIcon + th2))
+    // Totem RER : colonne bleue, rond RER blanc
+    rerTotem(q0 + w * .03f, deck, u)
 
     // Arbres des quais, parasols l'été
     for (i in 0 until 14) drawCircle(lerp(ground, nature, .35f + .25f * day), u * .07f, Offset(w * (.03f + i * .072f), base - u * .03f))
@@ -581,20 +527,6 @@ private fun DrawScope.drawRer(g: Geo, sky: SkyState, t: Float, @Suppress("UNUSED
     }
 }
 
-/** Un tram/bus qui traverse lentement l'arrière-plan, en boucle, loin derrière les grands ensembles. */
-private fun DrawScope.drawTram(g: Geo, sky: SkyState, t: Float) {
-    val y = g.base - g.u * .52f
-    val period = 46f
-    val span = g.w * 1.25f
-    val x = (t % period) / period * span - g.w * .12f
-    val tw = g.w * .055f
-    val hh = g.u * .035f
-    val body = lerp(Color(0xFF2E333A), Color(0xFFCDD3D6), .2f + .6f * sky.daylight)
-    drawRect(body.copy(alpha = .85f), Offset(x, y), Size(tw, hh))
-    val lit = lerp(Color(0xFF55606A), Color(0xFFF2D47A), sky.night)
-    for (k in 0..2) drawRect(lit, Offset(x + tw * (.08f + k * .3f), y + hh * .2f), Size(tw * .18f, hh * .5f))
-}
-
 private fun DrawScope.drawTrain(x: Float, deck: Float, hh: Float, car: Float, n: Int, sky: SkyState, doorsOpen: Boolean) {
     val y = deck - hh
     val body = lerp(Color(0xFF3A4046), Color(0xFFE9EBEC), .25f + .75f * sky.daylight)
@@ -636,7 +568,7 @@ private fun DrawScope.drawTrain(x: Float, deck: Float, hh: Float, car: Float, n:
     drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .03f, y + hh * .72f))
     drawCircle(Ivry.Ivoire.copy(alpha = .95f), hh * .05f, Offset(x + car * .08f, y + hh * .72f))
     val pxx = x + car * 1.5f
-    val top = deck - size.height * .27f * .23f
+    val top = y - hh * .22f
     drawLine(steelC, Offset(pxx - car * .08f, y), Offset(pxx, top), 1.5f)
     drawLine(steelC, Offset(pxx + car * .08f, y), Offset(pxx, top), 1.5f)
     drawLine(steelC, Offset(pxx - car * .07f, top), Offset(pxx + car * .07f, top), 2f)
@@ -679,18 +611,6 @@ private fun DrawScope.tri(a: Offset, b: Offset, c: Offset, color: Color) {
     drawPath(Path().apply { moveTo(a.x, a.y); lineTo(b.x, b.y); lineTo(c.x, c.y); close() }, color)
 }
 
-/** Volée de marches entre deux niveaux (passerelle → quai), simple suite de traits. */
-private fun DrawScope.stairs(x: Float, topY: Float, deck: Float, color: Color) {
-    val steps = 5
-    val dy = (deck - topY) / steps
-    var y = topY
-    repeat(steps) {
-        drawLine(color.copy(alpha = .55f), Offset(x - 4f, y), Offset(x + 4f, y), 1.3f)
-        y += dy
-    }
-    drawLine(color.copy(alpha = .4f), Offset(x, topY), Offset(x, deck), 1f)
-}
-
 /** Entrée de gare en bout de quai : les voyageurs y descendent plutôt que de s'effacer sans raison. */
 private fun DrawScope.stairway(x: Float, deck: Float, u: Float, rail: Color) {
     val wth = u * .1f
@@ -698,6 +618,104 @@ private fun DrawScope.stairway(x: Float, deck: Float, u: Float, rail: Color) {
     drawLine(rail.copy(alpha = .6f), Offset(x - wth / 2, deck - u * .02f), Offset(x + wth / 2, deck - u * .02f), 2f)
     for (k in 0..2) drawLine(rail.copy(alpha = .35f), Offset(x - wth / 2 + k * wth / 3, deck - u * .02f),
         Offset(x - wth / 2 + k * wth / 3, deck + u * .05f), 1.2f)
+}
+
+/**
+ * Bâtiment voyageurs de la gare d'Ivry-sur-Seine : pavillon central à deux niveaux coiffé d'un fronton à horloge,
+ * deux ailes basses, bandes alternées brique rouge / brique claire, chaînes d'angle en pierre, toit d'ardoise,
+ * baies cintrées. Posé derrière la voie : le RER passe devant.
+ */
+private fun DrawScope.stationBuilding(cx: Float, foot: Float, bw: Float, u: Float, sky: SkyState, ground: Color) {
+    val day = sky.daylight; val night = sky.night
+    val brick = lerp(ground, Ivry.Brique, .40f + .35f * day)
+    val cream = lerp(ground, Ivry.Sable, .40f + .40f * day)
+    val stone = lerp(ground, Ivry.Ivoire, .38f + .40f * day)
+    val slate = lerp(ground, Color(0xFF3B4452), .55f + .35f * day)
+    val glassDark = lerp(ground, Color(0xFF2A3038), .5f + .3f * day)
+    val glassLit = Color(0xFFF2C36B)
+
+    val cw = bw * .36f; val ww = (bw - cw) / 2
+    val x0 = cx - bw / 2; val cx0 = cx - cw / 2; val cx1 = cx + cw / 2; val x1 = cx + bw / 2
+    val wingTop = foot - u * .24f
+    val coreTop = foot - u * .42f
+
+    fun stripedWall(l: Float, r: Float, top: Float) {
+        val band = u * .028f
+        var y = top; var k = 0
+        while (y < foot) {
+            drawRect(if (k % 2 == 0) brick else cream, Offset(l, y), Size(r - l, minOf(band, foot - y)))
+            y += band; k++
+        }
+        // Chaînes d'angle et socle en pierre
+        drawRect(stone, Offset(l, top), Size((r - l) * .07f, foot - top))
+        drawRect(stone, Offset(r - (r - l) * .07f, top), Size((r - l) * .07f, foot - top))
+        drawRect(stone, Offset(l, top), Size(r - l, u * .018f))
+        drawRect(stone, Offset(l, foot - u * .03f), Size(r - l, u * .03f))
+    }
+    fun archWindow(x: Float, y: Float, ww2: Float, hh: Float, seed: Int) {
+        val lit = night > .3f && (seed * 37 % 10) < 7
+        val c = if (lit) glassLit.copy(alpha = .55f + .35f * night) else glassDark
+        drawRect(stone, Offset(x - ww2 * .18f, y - ww2 * .18f), Size(ww2 * 1.36f, hh + ww2 * .18f))
+        drawRect(c, Offset(x, y + ww2 / 2), Size(ww2, hh - ww2 / 2))
+        drawCircle(c, ww2 / 2, Offset(x + ww2 / 2, y + ww2 / 2))
+    }
+
+    // Toits d'ardoise des ailes (croupes)
+    for ((l, r) in listOf(x0 to cx0, cx1 to x1)) {
+        drawPath(Path().apply {
+            moveTo(l - u * .01f, wingTop); lineTo(l + u * .05f, wingTop - u * .06f)
+            lineTo(r - u * .05f, wingTop - u * .06f); lineTo(r + u * .01f, wingTop); close()
+        }, slate)
+        stripedWall(l, r, wingTop)
+        for (i in 0 until 2) archWindow(l + (r - l) * (.2f + i * .42f), wingTop + u * .06f, (r - l) * .18f, u * .14f, i + l.toInt())
+    }
+
+    // Pavillon central : toit, fronton à horloge, cheminées
+    drawRect(slate, Offset(cx0 + cw * .08f, coreTop - u * .13f), Size(u * .03f, u * .1f))
+    drawRect(slate, Offset(cx1 - cw * .08f - u * .03f, coreTop - u * .13f), Size(u * .03f, u * .1f))
+    drawPath(Path().apply {
+        moveTo(cx0 - u * .012f, coreTop); lineTo(cx0 + cw * .14f, coreTop - u * .08f)
+        lineTo(cx1 - cw * .14f, coreTop - u * .08f); lineTo(cx1 + u * .012f, coreTop); close()
+    }, slate)
+    val gw = cw * .26f
+    drawPath(Path().apply {
+        moveTo(cx - gw / 2, coreTop - u * .02f); lineTo(cx - gw / 2, coreTop - u * .1f)
+        quadraticTo(cx, coreTop - u * .16f, cx + gw / 2, coreTop - u * .1f)
+        lineTo(cx + gw / 2, coreTop - u * .02f); close()
+    }, stone)
+    drawCircle(lerp(ground, Ivry.Ivoire, .7f + .3f * day), gw * .26f, Offset(cx, coreTop - u * .085f))
+    drawCircle(ground.copy(alpha = .6f), gw * .26f, Offset(cx, coreTop - u * .085f), style = Stroke(1.2f))
+    stripedWall(cx0, cx1, coreTop)
+    // Corniche entre les deux niveaux, enseigne lumineuse
+    val mid = foot - u * .2f
+    drawRect(stone, Offset(cx0 - u * .006f, mid - u * .012f), Size(cw + u * .012f, u * .02f))
+    drawRect(Ivry.Ivoire.copy(alpha = .35f + .5f * night), Offset(cx - cw * .3f, mid - u * .036f), Size(cw * .6f, u * .012f))
+    for (i in 0 until 3) {
+        val wx = cx0 + cw * (.17f + i * .26f)
+        archWindow(wx, coreTop + u * .04f, cw * .13f, u * .11f, i + 3)
+        archWindow(wx, mid + u * .03f, cw * .13f, u * .15f, i + 7)
+    }
+}
+
+/** Totem RER comme devant la gare : colonne bleu nuit, rond RER bleu cerclé de blanc. */
+private fun DrawScope.rerTotem(x: Float, foot: Float, u: Float) {
+    val blue = Color(0xFF1B3C8C)
+    val tw = u * .055f; val th = u * .3f
+    drawRect(blue, Offset(x - tw / 2, foot - th), Size(tw, th))
+    val r = tw * .42f
+    val c = Offset(x, foot - th + tw * .6f)
+    drawCircle(Color.White, r, c)
+    drawCircle(blue, r * .82f, c)
+    val paint = android.graphics.Paint().apply {
+        color = android.graphics.Color.WHITE
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        textSize = r * .78f
+    }
+    drawContext.canvas.nativeCanvas.drawText("RER", c.x, c.y + paint.textSize * .36f, paint)
+    // Bandeau blanc : nom de la gare, juste un filet lisible de loin
+    drawRect(Color.White.copy(alpha = .8f), Offset(x - tw * .3f, c.y + r * 1.6f), Size(tw * .6f, u * .008f))
 }
 
 private fun DrawScope.crane(foot: Offset, height: Float, jib: Float, color: Color) {

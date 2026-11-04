@@ -39,7 +39,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 val M7_COLOR = Color(0xFFFA9ABA)
-val RERC_COLOR = Color(0xFFF3D311)
+val RERC_COLOR = Color(0xFFFFCE00)
 
 @Composable
 fun HomeScreen(
@@ -100,9 +100,9 @@ fun HomeScreen(
         // ZONE 2 — IVRY LIVE, plaques de verre posées sur la Seine
         Row(Modifier.fillMaxWidth().weight(.34f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WeatherPanel(weather, forecast, Modifier.weight(1.3f)) { onDetail(Detail.WEATHER) }
-            TransitPanel("7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve",
+            TransitPanel("M", "7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve",
                 metro, prefs.metroWalk, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
-            TransitPanel("C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris, nord",
+            TransitPanel("RER", "C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris, nord",
                 rer, prefs.rerWalk, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
             VelibPanel(velib, Modifier.weight(.9f)) { onDetail(Detail.VELIB) }
         }
@@ -242,6 +242,8 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
                 Text(weather.error ?: "Chargement…", fontSize = 12.sp, color = p.textDim)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    WeatherIcon(w.code, isNightHour(java.time.LocalTime.now(PARIS).hour, w.sunrise, w.sunset), Modifier.size(40.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(deg(w.temp), fontSize = 38.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold, color = p.text)
                     Spacer(Modifier.width(10.dp))
                     Column {
@@ -259,6 +261,8 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
                     hours.forEach { h ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("${h.hour}h", fontSize = 9.5.sp, lineHeight = 11.sp, color = p.textDim)
+                            WeatherIcon(h.code, isNightHour(h.hour, weather.value?.sunrise, weather.value?.sunset),
+                                Modifier.padding(vertical = 1.dp).size(18.dp))
                             Text(deg(h.temp), fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, color = p.text)
                             Text("${h.rainProb}%", fontSize = 9.sp, lineHeight = 11.sp, color = Ivry.Pluie)
                         }
@@ -273,7 +277,7 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
 
 @Composable
 private fun TransitPanel(
-    code: String, round: Boolean, color: Color, title: String, station: String, direction: String,
+    mode: String, code: String, round: Boolean, color: Color, title: String, station: String, direction: String,
     live: Live<Transit>, walk: Int, shape: Shape, modifier: Modifier, onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -282,6 +286,8 @@ private fun TransitPanel(
         TerraceMark()
         Column(Modifier.fillMaxSize().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                ModeBadge(mode)
+                Spacer(Modifier.width(4.dp))
                 LineBadge(code, color, round)
                 Spacer(Modifier.width(8.dp))
                 Column {

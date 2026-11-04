@@ -134,6 +134,18 @@ fun LineBadge(code: String, color: Color, round: Boolean) {
     ) { Text(code, color = Color(0xFF111111), fontWeight = FontWeight.Black, fontSize = 16.sp) }
 }
 
+/** Pictogramme de mode Île-de-France Mobilités : rond bleu nuit cerclé de blanc, « M » ou « RER » en blanc. */
+@Composable
+fun ModeBadge(mode: String) {
+    Box(
+        Modifier.size(28.dp).background(Color.White, CircleShape).padding(2.dp).background(Color(0xFF1B3C8C), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(mode, color = Color.White, fontWeight = FontWeight.Black,
+            fontSize = if (mode.length > 1) 9.sp else 15.sp, letterSpacing = if (mode.length > 1) (-0.3).sp else 0.sp)
+    }
+}
+
 @Composable
 fun ActionButton(
     label: String,
