@@ -7,6 +7,9 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Réponse HTTP non 2xx : porte le code pour un message d'erreur lisible côté UI. */
+class HttpStatusException(val code: Int) : IOException("HTTP $code")
+
 object Http {
     suspend fun get(url: String, headers: Map<String, String> = emptyMap()): String =
         withContext(Dispatchers.IO) {
@@ -18,7 +21,7 @@ object Http {
                 c.setRequestProperty("User-Agent", "IvryOS/1.0 (Android TV)")
                 headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
                 val code = c.responseCode
-                if (code !in 200..299) throw IOException("HTTP $code")
+                if (code !in 200..299) throw HttpStatusException(code)
                 c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             } finally {
                 c.disconnect()

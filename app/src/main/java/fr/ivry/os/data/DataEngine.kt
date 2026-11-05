@@ -133,6 +133,13 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
     private fun describe(e: Exception): String = when (e) {
         is UnknownHostException -> "Pas de connexion"
         is SocketTimeoutException -> "Délai dépassé"
+        is HttpStatusException -> when (e.code) {
+            429 -> "Trop de requêtes, réessai dans un instant"
+            in 500..599 -> "Service indisponible, réessai en cours"
+            401, 403 -> "Accès refusé (jeton à vérifier)"
+            404 -> "Ressource introuvable"
+            else -> "Erreur réseau (${e.code})"
+        }
         else -> e.message ?: e.javaClass.simpleName
     }
 

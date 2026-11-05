@@ -328,7 +328,7 @@ private fun MetroColumn(label: String, dep: Departure?, now: Long, modifier: Mod
         Text(label, color = Color.White.copy(alpha = .55f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = .6.sp)
         Spacer(Modifier.height(2.dp))
         if (dep == null) {
-            Text("—", color = Ivry.Jaune.copy(alpha = .5f), fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text("—", color = Ivry.Jaune.copy(alpha = .75f), fontSize = 24.sp, fontWeight = FontWeight.Black)
         } else {
             val mins = ((dep.expectedAt - now) / 60_000L).toInt().coerceAtLeast(0)
             Row(verticalAlignment = Alignment.Bottom) {
@@ -349,7 +349,7 @@ private fun MetroFooter(t: Transit?, live: Live<Transit>, p: Palette) {
                 live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
                 else -> live.error ?: "Chargement…"
             },
-            fontSize = 9.5.sp, lineHeight = 12.sp, color = Color.White.copy(alpha = .55f),
+            fontSize = 10.5.sp, lineHeight = 13.sp, color = Color.White.copy(alpha = .85f), fontWeight = FontWeight.Medium,
             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(8.dp),
         )
         return
@@ -403,9 +403,9 @@ private fun RerBoard(
                             live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
                             else -> live.error ?: "Chargement…"
                         },
-                        fontSize = 9.5.sp, lineHeight = 12.sp, color = Color.White.copy(alpha = .55f),
+                        fontSize = 10.5.sp, lineHeight = 13.sp, color = Color.White.copy(alpha = .85f), fontWeight = FontWeight.Medium,
                     )
-                    deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 11.sp, color = Color.White.copy(alpha = .55f))
+                    deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 11.sp, color = Color.White.copy(alpha = .7f))
                     else -> deps.forEachIndexed { i, d ->
                         if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .08f)))
                         RerRow(code, color, d, now)
