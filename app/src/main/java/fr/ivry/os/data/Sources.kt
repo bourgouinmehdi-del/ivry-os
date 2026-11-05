@@ -120,14 +120,17 @@ object Sources {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
-    /** txt = {"sm": <réponse stop-monitoring>, "gm": <réponse general-message ou null>} */
-    fun parseTransit(txt: String, filter: String, max: Int = 8): Transit {
+    /**
+     * Horaires seuls (réponse stop-monitoring brute). Séparé des messages trafic pour pouvoir
+     * être interrogé à son propre rythme (quasi temps réel) sans peser sur le quota PRIM.
+     */
+    fun parseStopMonitoring(txt: String, filter: String, max: Int = 8): List<Departure> {
         val root = JSONObject(txt)
         // Filtre : mots séparés par des virgules ; « !mot » exclut, les autres mots doivent correspondre
         val words = filter.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         val excludes = words.filter { it.startsWith("!") }.map { it.drop(1).trim() }.filter { it.isNotEmpty() }
         val keywords = words.filterNot { it.startsWith("!") }
-        val visits = root.getJSONObject("sm").getJSONObject("Siri").getJSONObject("ServiceDelivery")
+        val visits = root.getJSONObject("Siri").getJSONObject("ServiceDelivery")
             .getJSONArray("StopMonitoringDelivery").getJSONObject(0)
             .optJSONArray("MonitoredStopVisit") ?: JSONArray()
 
@@ -150,11 +153,11 @@ object Sources {
             deps += Departure(dest, t, atStop)
         }
         deps.sortBy { it.expectedAt }
-
-        val gm = root.optJSONObject("gm")
-        val messages = if (gm != null) parseMessages(gm) else emptyList()
-        return Transit(deps.take(max), messages, gm != null)
+        return deps.take(max)
     }
+
+    /** Messages trafic seuls (réponse general-message brute). Changent rarement : interrogés à part, peu souvent. */
+    fun parseMessages(txt: String): List<String> = parseMessages(JSONObject(txt))
 
     private fun parseMessages(gm: JSONObject): List<String> {
         val out = LinkedHashSet<String>()

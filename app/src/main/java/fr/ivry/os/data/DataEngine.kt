@@ -56,14 +56,13 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
 
         loop("weather_now", 15 * MIN, weatherNow, { Http.get(Sources.CURRENT_URL) }) { t, _ -> Sources.parseCurrent(t) }
         loop("forecast", 30 * MIN, forecast, { Http.get(Sources.FORECAST_URL) }) { t, _ -> Sources.parseForecast(t) }
-        // Quota PRIM : de l'ordre de 1000 requêtes/jour par API pour une clé récente — un polling
-        // toutes les 45 s (x2 appels, x2 lignes) l'épuisait en quelques heures. Le compte à rebours
-        // affiché reste calculé en direct à partir du dernier horaire connu : ralentir l'actualisation
-        // en arrière-plan ne fige pas les minutes affichées.
-        loop("metro7", 3 * MIN, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) },
-            slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.metroFilter) }
-        loop("rerC", 3 * MIN, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) },
-            slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.rerFilter) }
+        // Horaires (stop-monitoring) et messages trafic (general-message) sont deux API PRIM
+        // distinctes, chacune avec son propre quota (≈1000 requêtes/jour pour une clé récente).
+        // Les horaires sont interrogés à ~1x/min — PRIM ne les republie pas plus vite de toute
+        // façon — pour rester vraiment temps réel ; les messages trafic, qui changent rarement,
+        // beaucoup moins souvent, afin de ne pas gaspiller le quota pour rien.
+        transitLoop("metro7", metro, { it.metroStopRef }, { it.metroLineRef }, { it.metroFilter })
+        transitLoop("rerC", rer, { it.rerStopRef }, { it.rerLineRef }, { it.rerFilter })
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
         loop("news", 10 * MIN, news, { p ->
             News.toJson(News.parse(Http.get(p.newsUrl, mapOf("Accept" to "application/rss+xml, application/xml, text/xml"))))
@@ -161,15 +160,98 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
         else -> e.message ?: e.javaClass.simpleName
     }
 
-    private suspend fun fetchTransit(p: Prefs, stop: String, line: String): String {
-        if (p.proxyUrl.isBlank()) throw IllegalStateException("Proxy PRIM non configuré")
-        if (stop.isBlank()) throw IllegalStateException("Arrêt non configuré")
-        val h = if (p.proxyToken.isBlank()) emptyMap() else mapOf("x-ivry-token" to p.proxyToken)
-        val sm = Http.get(Sources.stopMonitoringUrl(p.proxyUrl, stop), h)
-        val gm = if (line.isBlank()) null else runCatching {
-            JSONObject(Http.get(Sources.generalMessageUrl(p.proxyUrl, line), h))
-        }.getOrNull()
-        return JSONObject().put("sm", JSONObject(sm)).put("gm", gm ?: JSONObject.NULL).toString()
+    private fun headers(p: Prefs): Map<String, String> =
+        if (p.proxyToken.isBlank()) emptyMap() else mapOf("x-ivry-token" to p.proxyToken)
+
+    /**
+     * Horaires et messages trafic d'une ligne, interrogés indépendamment à leur propre rythme
+     * (voir le commentaire dans start()). Les deux alimentent le même [Live]<Transit> : chacun ne
+     * touche que sa partie (departures ou messages), l'autre partie et la dernière bonne valeur
+     * connue sont préservées en cas d'erreur, pour ne jamais faire disparaître des données valides.
+     */
+    private fun transitLoop(
+        key: String,
+        target: MutableStateFlow<Live<Transit>>,
+        stopRefOf: (Prefs) -> String,
+        lineRefOf: (Prefs) -> String,
+        filterOf: (Prefs) -> String,
+    ) {
+        val smKey = "${key}_sm"
+        val gmKey = "${key}_gm"
+
+        // Horaires : quasi temps réel.
+        scope.launch(Dispatchers.IO) {
+            cache.read(smKey)?.let { (time, text) ->
+                val prefs = settings.prefs.first()
+                runCatching { Sources.parseStopMonitoring(text, filterOf(prefs)) }.onSuccess { deps ->
+                    val cur = target.value.value
+                    target.value = target.value.copy(value = (cur ?: Transit(deps, emptyList(), false)).copy(departures = deps), fetchedAt = time)
+                }
+            }
+            while (isActive) {
+                foreground.first { it }
+                if (isNightClosure(System.currentTimeMillis())) {
+                    withTimeoutOrNull(5 * MIN) { refreshSignal.first() }
+                    continue
+                }
+                val prefs = settings.prefs.first()
+                val stop = stopRefOf(prefs)
+                try {
+                    if (prefs.proxyUrl.isBlank()) throw IllegalStateException("Proxy PRIM non configuré")
+                    if (stop.isBlank()) throw IllegalStateException("Arrêt non configuré")
+                    val text = Http.get(Sources.stopMonitoringUrl(prefs.proxyUrl, stop), headers(prefs))
+                    cache.write(smKey, text)
+                    val deps = Sources.parseStopMonitoring(text, filterOf(prefs))
+                    val cur = target.value.value
+                    target.value = target.value.copy(
+                        value = (cur ?: Transit(deps, emptyList(), false)).copy(departures = deps),
+                        fetchedAt = System.currentTimeMillis(), error = null,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    target.value = target.value.copy(error = describe(e))
+                }
+                val wait = if (idle.value) 3 * MIN else 60 * SEC
+                withTimeoutOrNull(wait) { refreshSignal.first() }
+            }
+        }
+
+        // Messages trafic : changent rarement, interrogés beaucoup moins souvent.
+        scope.launch(Dispatchers.IO) {
+            cache.read(gmKey)?.let { (_, text) ->
+                runCatching { Sources.parseMessages(text) }.onSuccess { messages ->
+                    val cur = target.value.value
+                    if (cur != null) target.value = target.value.copy(value = cur.copy(messages = messages, messagesAvailable = true))
+                }
+            }
+            while (isActive) {
+                foreground.first { it }
+                if (isNightClosure(System.currentTimeMillis())) {
+                    withTimeoutOrNull(5 * MIN) { refreshSignal.first() }
+                    continue
+                }
+                val prefs = settings.prefs.first()
+                val line = lineRefOf(prefs)
+                if (prefs.proxyUrl.isNotBlank() && line.isNotBlank()) {
+                    try {
+                        val text = Http.get(Sources.generalMessageUrl(prefs.proxyUrl, line), headers(prefs))
+                        cache.write(gmKey, text)
+                        val messages = Sources.parseMessages(text)
+                        val cur = target.value.value
+                        if (cur != null) target.value = target.value.copy(value = cur.copy(messages = messages, messagesAvailable = true))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Les horaires restent affichés même si les messages trafic échouent.
+                        val cur = target.value.value
+                        if (cur != null) target.value = target.value.copy(value = cur.copy(messagesAvailable = false))
+                    }
+                }
+                val wait = if (idle.value) 30 * MIN else 10 * MIN
+                withTimeoutOrNull(wait) { refreshSignal.first() }
+            }
+        }
     }
 
     private suspend fun fetchVelib(p: Prefs): String {
