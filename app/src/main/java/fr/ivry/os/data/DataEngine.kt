@@ -56,9 +56,13 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
 
         loop("weather_now", 15 * MIN, weatherNow, { Http.get(Sources.CURRENT_URL) }) { t, _ -> Sources.parseCurrent(t) }
         loop("forecast", 30 * MIN, forecast, { Http.get(Sources.FORECAST_URL) }) { t, _ -> Sources.parseForecast(t) }
-        loop("metro7", 45 * SEC, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) },
+        // Quota PRIM : de l'ordre de 1000 requêtes/jour par API pour une clé récente — un polling
+        // toutes les 45 s (x2 appels, x2 lignes) l'épuisait en quelques heures. Le compte à rebours
+        // affiché reste calculé en direct à partir du dernier horaire connu : ralentir l'actualisation
+        // en arrière-plan ne fige pas les minutes affichées.
+        loop("metro7", 3 * MIN, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) },
             slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.metroFilter) }
-        loop("rerC", 45 * SEC, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) },
+        loop("rerC", 3 * MIN, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) },
             slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.rerFilter) }
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
         loop("news", 10 * MIN, news, { p ->
