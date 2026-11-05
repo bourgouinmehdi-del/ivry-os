@@ -186,6 +186,16 @@ fun Freshness(live: Live<*>, now: Long, modifier: Modifier = Modifier) {
 private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 fun hhmm(ms: Long): String = HHMM.format(Instant.ofEpochMilli(ms).atZone(PARIS))
 
+/**
+ * Fermeture nocturne approximative du réseau (Métro/RER francilien) : ~01h15–05h30.
+ * Horaires génériques publiés par IDFM/RATP, pas une donnée temps réel — utilisés seulement
+ * pour éviter d'afficher une erreur réseau là où il n'y a simplement plus de service.
+ */
+fun isNightClosure(ms: Long): Boolean {
+    val t = Instant.ofEpochMilli(ms).atZone(PARIS).toLocalTime()
+    return t.isAfter(java.time.LocalTime.of(1, 15)) && t.isBefore(java.time.LocalTime.of(5, 30))
+}
+
 fun ago(d: Long): String = when {
     d < 20_000 -> "à l'instant"
     d < 60_000 -> "il y a ${d / 1000} s"

@@ -56,12 +56,10 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
 
         loop("weather_now", 15 * MIN, weatherNow, { Http.get(Sources.CURRENT_URL) }) { t, _ -> Sources.parseCurrent(t) }
         loop("forecast", 30 * MIN, forecast, { Http.get(Sources.FORECAST_URL) }) { t, _ -> Sources.parseForecast(t) }
-        loop("metro7", 45 * SEC, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) }, slowWhenIdle = false) { t, p ->
-            Sources.parseTransit(t, p.metroFilter)
-        }
-        loop("rerC", 45 * SEC, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) }, slowWhenIdle = false) { t, p ->
-            Sources.parseTransit(t, p.rerFilter)
-        }
+        loop("metro7", 45 * SEC, metro, { fetchTransit(it, it.metroStopRef, it.metroLineRef) },
+            slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.metroFilter) }
+        loop("rerC", 45 * SEC, rer, { fetchTransit(it, it.rerStopRef, it.rerLineRef) },
+            slowWhenIdle = true, pauseAtNight = true) { t, p -> Sources.parseTransit(t, p.rerFilter) }
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
         loop("news", 10 * MIN, news, { p ->
             News.toJson(News.parse(Http.get(p.newsUrl, mapOf("Accept" to "application/rss+xml, application/xml, text/xml"))))
@@ -103,6 +101,7 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
         target: MutableStateFlow<Live<T>>,
         fetch: suspend (Prefs) -> String,
         slowWhenIdle: Boolean = true,
+        pauseAtNight: Boolean = false,
         parse: (String, Prefs) -> T,
     ) {
         scope.launch(Dispatchers.IO) {
@@ -113,6 +112,11 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
             }
             while (isActive) {
                 foreground.first { it }   // aucun appel réseau quand le launcher est en arrière-plan
+                if (pauseAtNight && isNightClosure(System.currentTimeMillis())) {
+                    // Réseau fermé la nuit : on évite d'interroger PRIM pour rien (et de se faire limiter).
+                    withTimeoutOrNull(5 * MIN) { refreshSignal.first() }
+                    continue
+                }
                 val prefs = settings.prefs.first()
                 try {
                     val text = fetch(prefs)
@@ -128,6 +132,16 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
                 withTimeoutOrNull(wait) { refreshSignal.first() }
             }
         }
+    }
+
+    /**
+     * Fermeture nocturne approximative du réseau (Métro/RER francilien) : ~01h15–05h30.
+     * Horaires génériques publiés par IDFM/RATP, pas une donnée temps réel — sert seulement
+     * à suspendre les appels PRIM quand il n'y a de toute façon plus de service.
+     */
+    private fun isNightClosure(ms: Long): Boolean {
+        val t = java.time.Instant.ofEpochMilli(ms).atZone(PARIS).toLocalTime()
+        return t.isAfter(java.time.LocalTime.of(1, 15)) && t.isBefore(java.time.LocalTime.of(5, 30))
     }
 
     private fun describe(e: Exception): String = when (e) {
