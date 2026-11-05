@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -100,10 +102,10 @@ fun HomeScreen(
         // ZONE 2 — IVRY LIVE, plaques de verre posées sur la Seine
         Row(Modifier.fillMaxWidth().weight(.34f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WeatherPanel(weather, forecast, Modifier.weight(1.3f)) { onDetail(Detail.WEATHER) }
-            TransitPanel("M", "7", true, M7_COLOR, "MÉTRO 7", "Mairie d'Ivry", "→ La Courneuve",
-                metro, prefs.metroWalk, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
-            TransitPanel("RER", "C", false, RERC_COLOR, "RER C", "Ivry-sur-Seine", "→ Paris, nord",
-                rer, prefs.rerWalk, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
+            MetroBoard("7", M7_COLOR, "Mairie d'Ivry", "→ La Courneuve",
+                metro, CutCornerShape(bottomStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.METRO) }
+            RerBoard("C", RERC_COLOR, "Ivry-sur-Seine", "→ Paris, nord",
+                rer, CutCornerShape(topStart = 22.dp), Modifier.weight(1f)) { onDetail(Detail.RER) }
             VelibPanel(velib, Modifier.weight(.9f)) { onDetail(Detail.VELIB) }
         }
         Spacer(Modifier.height(10.dp))
@@ -275,68 +277,175 @@ private fun WeatherPanel(weather: Live<CurrentWeather>, forecast: Live<Forecast>
     }
 }
 
+/**
+ * Les deux modules transport reprennent le style des vrais panneaux voyageurs (fond noir,
+ * roundel de ligne, chiffres ambrés) plutôt que le verre du reste de l'écran — comme une
+ * vraie borne encastrée dans l'interface. Mêmes données, mêmes états de secours que le reste.
+ */
 @Composable
-private fun TransitPanel(
-    mode: String, code: String, round: Boolean, color: Color, title: String, station: String, direction: String,
-    live: Live<Transit>, walk: Int, shape: Shape, modifier: Modifier, onClick: () -> Unit,
+private fun MetroBoard(
+    code: String, color: Color, station: String, direction: String,
+    live: Live<Transit>, shape: Shape, modifier: Modifier, onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
     val now = rememberTick(15_000)
-    Plate(modifier.fillMaxHeight(), shape = shape, onClick = onClick) {
-        TerraceMark()
-        Column(Modifier.fillMaxSize().padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ModeBadge(mode)
+    Plate(modifier.fillMaxHeight(), shape = shape, background = Color(0xFF0A0A0C), onClick = onClick) { f ->
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(21.dp).border(1.6.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                    Text("M", color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                }
                 Spacer(Modifier.width(4.dp))
-                LineBadge(code, color, round)
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text("$title  $direction", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
-                        color = p.textDim, fontFamily = Condensed, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(station, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = p.text, maxLines = 1)
+                Box(Modifier.size(21.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(code, color = Color(0xFF111111), fontWeight = FontWeight.Black, fontSize = 12.sp)
                 }
-            }
-            Spacer(Modifier.height(4.dp))
-            val t = live.value
-            val deps = t?.departures?.filter { it.expectedAt > now - 60_000 }?.take(3)
-            when {
-                t == null -> Text(
-                    when {
-                        live.error?.contains("Proxy") == true -> "Ajoute le proxy PRIM dans Paramètres › Sources pour voir les passages."
-                        live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
-                        else -> live.error ?: "Chargement…"
-                    },
-                    fontSize = 11.sp, lineHeight = 14.sp, color = p.textDim,
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "$station  $direction", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 13.sp,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
-                deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 12.sp, color = p.textDim)
-                else -> {
-                    // Prochain départ en grand, puis les suivants sur une ligne
-                    val first = deps.first()
-                    val sameDest = deps.map { it.destination }.distinct().size == 1
-                    Text(minutesLabel(first, now), fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold,
-                        color = p.text)
-                    if (!sameDest) Text("vers ${shortDest(first.destination)}", fontSize = 11.sp, lineHeight = 13.sp,
-                        color = p.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val rest = deps.drop(1)
-                    if (rest.isNotEmpty()) Text(
-                        "Puis " + rest.joinToString(" · ") { (if (sameDest) "" else shortDest(it.destination) + " ") + minutesLabel(it, now) },
-                        fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = p.text.copy(alpha = .8f),
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
-                    )
+                Spacer(Modifier.width(4.dp))
+                Box(Modifier.background(Ivry.Jaune, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                    Text(hhmm(now), color = Color(0xFF111111), fontWeight = FontWeight.Black, fontSize = 10.5.sp)
                 }
             }
-            Spacer(Modifier.weight(1f))
+            Box(Modifier.fillMaxWidth().height(3.dp).background(color))
+            val t = live.value
+            val deps = t?.departures?.filter { it.expectedAt > now - 60_000 }
+            Row(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                MetroColumn("1er métro", deps?.getOrNull(0), now, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).fillMaxHeight(.55f).align(Alignment.CenterVertically).background(Color.White.copy(alpha = .14f)))
+                MetroColumn("2e métro", deps?.getOrNull(1), now, Modifier.weight(1f))
+            }
+            MetroFooter(t, live, p)
+        }
+    }
+}
+
+@Composable
+private fun MetroColumn(label: String, dep: Departure?, now: Long, modifier: Modifier) {
+    Column(modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color.White.copy(alpha = .55f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = .6.sp)
+        Spacer(Modifier.height(2.dp))
+        if (dep == null) {
+            Text("—", color = Ivry.Jaune.copy(alpha = .5f), fontSize = 24.sp, fontWeight = FontWeight.Black)
+        } else {
+            val mins = ((dep.expectedAt - now) / 60_000L).toInt().coerceAtLeast(0)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("$mins", color = Ivry.Jaune, fontSize = 28.sp, lineHeight = 28.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.width(3.dp))
+                Text("min", color = Ivry.Jaune, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 3.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetroFooter(t: Transit?, live: Live<Transit>, p: Palette) {
+    if (t == null) {
+        Text(
+            when {
+                live.error?.contains("Proxy") == true -> "Ajoute le proxy PRIM dans Paramètres › Sources."
+                live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
+                else -> live.error ?: "Chargement…"
+            },
+            fontSize = 9.5.sp, lineHeight = 12.sp, color = Color.White.copy(alpha = .55f),
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(8.dp),
+        )
+        return
+    }
+    val (txt, warn) = when {
+        !t.messagesAvailable -> "Info trafic indisponible" to false
+        t.messages.isEmpty() -> "Aucune perturbation signalée" to false
+        else -> t.messages.first() to true
+    }
+    Row(
+        Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 7.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Info, null, tint = if (warn) p.warn else Color(0xFF1F2D4A), modifier = Modifier.size(11.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(
+            txt, fontSize = 9.sp, lineHeight = 11.sp, color = Color(0xFF111111),
+            fontWeight = if (warn) FontWeight.Bold else FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun RerBoard(
+    code: String, color: Color, station: String, direction: String,
+    live: Live<Transit>, shape: Shape, modifier: Modifier, onClick: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val now = rememberTick(15_000)
+    Plate(modifier.fillMaxHeight(), shape = shape, background = Color(0xFF0A0A0C), onClick = onClick) { f ->
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(19.dp).background(color, RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
+                    Text(code, color = Color(0xFF111111), fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "$station  $direction", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(hhmm(now), color = Ivry.Jaune, fontWeight = FontWeight.Black, fontSize = 11.sp)
+            }
+            val t = live.value
+            val deps = t?.departures?.filter { it.expectedAt > now - 60_000 }?.take(4)
+            Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp)) {
+                when {
+                    t == null -> Text(
+                        when {
+                            live.error?.contains("Proxy") == true -> "Ajoute le proxy PRIM dans Paramètres › Sources."
+                            live.error?.contains("Arrêt") == true -> "Renseigne l'arrêt dans Paramètres › Sources."
+                            else -> live.error ?: "Chargement…"
+                        },
+                        fontSize = 9.5.sp, lineHeight = 12.sp, color = Color.White.copy(alpha = .55f),
+                    )
+                    deps.isNullOrEmpty() -> Text("Aucun passage annoncé", fontSize = 11.sp, color = Color.White.copy(alpha = .55f))
+                    else -> deps.forEachIndexed { i, d ->
+                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .08f)))
+                        RerRow(code, color, d, now)
+                    }
+                }
+            }
             if (t != null) {
                 val (txt, warn) = when {
                     !t.messagesAvailable -> "Info trafic indisponible" to false
                     t.messages.isEmpty() -> "Aucune perturbation signalée" to false
                     else -> t.messages.first() to true
                 }
-                Text(txt, fontSize = 10.sp, color = if (warn) p.warn else p.nature, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, fontWeight = if (warn) FontWeight.Bold else FontWeight.Normal)
-                Spacer(Modifier.height(2.dp))
+                Text(
+                    txt, fontSize = 9.sp, lineHeight = 11.sp, color = if (warn) p.warn else Color.White.copy(alpha = .45f),
+                    fontWeight = if (warn) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
             }
-            if (t != null) Freshness(live, now, Modifier.padding(end = 14.dp))
+        }
+    }
+}
+
+@Composable
+private fun RerRow(code: String, color: Color, d: Departure, now: Long) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(15.dp).background(color, RoundedCornerShape(2.dp)), contentAlignment = Alignment.Center) {
+            Text(code, color = Color(0xFF111111), fontWeight = FontWeight.Black, fontSize = 8.5.sp)
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(
+            shortDest(d.destination), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(4.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(hhmm(d.expectedAt), color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp, lineHeight = 13.sp)
+            Text(
+                minutesLabel(d, now), fontSize = 8.5.sp, lineHeight = 10.sp,
+                color = if (d.atStop) Ivry.Jaune else Color.White.copy(alpha = .5f),
+            )
         }
     }
 }
