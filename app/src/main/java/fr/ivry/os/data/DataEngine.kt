@@ -56,11 +56,9 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
 
         loop("weather_now", 15 * MIN, weatherNow, { Http.get(Sources.CURRENT_URL) }) { t, _ -> Sources.parseCurrent(t) }
         loop("forecast", 30 * MIN, forecast, { Http.get(Sources.FORECAST_URL) }) { t, _ -> Sources.parseForecast(t) }
-        // Horaires (stop-monitoring) et messages trafic (general-message) sont deux API PRIM
-        // distinctes, chacune avec son propre quota (≈1000 requêtes/jour pour une clé récente).
-        // Les horaires sont interrogés à ~1x/min — PRIM ne les republie pas plus vite de toute
-        // façon — pour rester vraiment temps réel ; les messages trafic, qui changent rarement,
-        // beaucoup moins souvent, afin de ne pas gaspiller le quota pour rien.
+        // Horaires (stop-monitoring) et messages trafic (general-message) restent deux boucles
+        // séparées — quotas PRIM augmentés au maximum, vrai temps réel sur les deux (20 s / 60 s
+        // au ralenti pour les horaires, 60 s / 3 min pour les messages trafic, qui bougent moins).
         transitLoop("metro7", metro, { it.metroStopRef }, { it.metroLineRef }, { it.metroFilter })
         transitLoop("rerC", rer, { it.rerStopRef }, { it.rerLineRef }, { it.rerFilter })
         loop("velib", 60 * SEC, velib, { fetchVelib(it) }) { t, _ -> Sources.parseVelib(t) }
@@ -212,12 +210,12 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
                 } catch (e: Exception) {
                     target.value = target.value.copy(error = describe(e))
                 }
-                val wait = if (idle.value) 3 * MIN else 60 * SEC
+                val wait = if (idle.value) 60 * SEC else 20 * SEC
                 withTimeoutOrNull(wait) { refreshSignal.first() }
             }
         }
 
-        // Messages trafic : changent rarement, interrogés beaucoup moins souvent.
+        // Messages trafic : changent rarement, mais le quota le permet largement désormais.
         scope.launch(Dispatchers.IO) {
             cache.read(gmKey)?.let { (_, text) ->
                 runCatching { Sources.parseMessages(text) }.onSuccess { messages ->
@@ -248,7 +246,7 @@ class DataEngine(context: Context, private val settings: SettingsRepo, private v
                         if (cur != null) target.value = target.value.copy(value = cur.copy(messagesAvailable = false))
                     }
                 }
-                val wait = if (idle.value) 30 * MIN else 10 * MIN
+                val wait = if (idle.value) 3 * MIN else 60 * SEC
                 withTimeoutOrNull(wait) { refreshSignal.first() }
             }
         }
